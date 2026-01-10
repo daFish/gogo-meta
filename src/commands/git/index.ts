@@ -32,7 +32,7 @@ export function registerGitCommands(program: Command): void {
 
   git
     .command('update')
-    .description('Clone any missing child repositories defined in .meta')
+    .description('Clone any missing child repositories defined in .gogo')
     .option('--include-only <dirs>', 'Only include specified directories')
     .option('--exclude-only <dirs>', 'Exclude specified directories')
     .option('--parallel', 'Clone in parallel')

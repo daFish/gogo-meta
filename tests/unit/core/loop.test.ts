@@ -31,7 +31,7 @@ describe('loop', () => {
     (executor.execute as ReturnType<typeof vi.fn>).mockImplementation(mockExecute);
 
     vol.fromJSON({
-      '/meta/.meta': JSON.stringify({ projects: {}, ignore: [] }),
+      '/meta/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
       '/meta/api/.git': '',
       '/meta/web/.git': '',
     });

@@ -44,7 +44,7 @@ describe('project commands', () => {
   describe('create command', () => {
     it('creates new project directory and initializes git', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({
+        '/project/.gogo': JSON.stringify({
           projects: {},
           ignore: [],
         }),
@@ -63,9 +63,9 @@ describe('project commands', () => {
       );
     });
 
-    it('updates .meta file with new project', async () => {
+    it('updates .gogo file with new project', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({
+        '/project/.gogo': JSON.stringify({
           projects: {},
           ignore: [],
         }),
@@ -75,7 +75,7 @@ describe('project commands', () => {
 
       await createCommand('api', 'git@github.com:org/api.git');
 
-      const content = vol.readFileSync('/project/.meta', 'utf-8') as string;
+      const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
       const config = JSON.parse(content);
 
       expect(config.projects.api).toBe('git@github.com:org/api.git');
@@ -83,7 +83,7 @@ describe('project commands', () => {
 
     it('throws error if directory already exists', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
         '/project/existing/.git': '',
       });
 
@@ -102,7 +102,7 @@ describe('project commands', () => {
 
     it('adds project to .gitignore', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
         '/project/.gitignore': 'node_modules\n',
       });
 
@@ -118,7 +118,7 @@ describe('project commands', () => {
   describe('import command', () => {
     it('clones repository when directory does not exist', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({
+        '/project/.gogo': JSON.stringify({
           projects: {},
           ignore: [],
         }),
@@ -136,7 +136,7 @@ describe('project commands', () => {
 
     it('imports existing directory with remote', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
         '/project/existing/.git': '',
         '/project/.gitignore': '',
       });
@@ -149,7 +149,7 @@ describe('project commands', () => {
 
       await importCommand('existing');
 
-      const content = vol.readFileSync('/project/.meta', 'utf-8') as string;
+      const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
       const config = JSON.parse(content);
 
       expect(config.projects.existing).toBe('git@github.com:org/existing.git');
@@ -157,7 +157,7 @@ describe('project commands', () => {
 
     it('throws error for existing directory without remote and no URL', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
         '/project/existing/.git': '',
       });
 
@@ -168,22 +168,22 @@ describe('project commands', () => {
 
     it('throws error for non-existent directory without URL', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
       });
 
       await expect(importCommand('nonexistent')).rejects.toThrow('URL is required');
     });
 
-    it('updates .meta file with imported project', async () => {
+    it('updates .gogo file with imported project', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
       });
 
       mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
 
       await importCommand('api', 'git@github.com:org/api.git');
 
-      const content = vol.readFileSync('/project/.meta', 'utf-8') as string;
+      const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
       const config = JSON.parse(content);
 
       expect(config.projects.api).toBe('git@github.com:org/api.git');

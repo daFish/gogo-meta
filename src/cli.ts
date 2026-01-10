@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { registerInitCommand } from './commands/init.js';
 import { registerExecCommand } from './commands/exec.js';
+import { registerRunCommand } from './commands/run.js';
 import { registerGitCommands } from './commands/git/index.js';
 import { registerProjectCommands } from './commands/project/index.js';
 import { registerNpmCommands } from './commands/npm/index.js';
@@ -36,6 +37,7 @@ export function createProgram(): Command {
 
   registerInitCommand(program);
   registerExecCommand(program);
+  registerRunCommand(program);
   registerGitCommands(program);
   registerProjectCommands(program);
   registerNpmCommands(program);

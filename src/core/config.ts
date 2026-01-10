@@ -1,8 +1,8 @@
 import { readFile, writeFile, access } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { MetaConfigSchema, LoopRcSchema, type MetaConfig, type LoopRc } from '../types/index.js';
+import { MetaConfigSchema, LoopRcSchema, type MetaConfig, type LoopRc, type CommandConfig } from '../types/index.js';
 
-export const META_FILE = '.meta';
+export const META_FILE = '.gogo';
 export const LOOPRC_FILE = '.looprc';
 
 export class ConfigError extends Error {
@@ -120,4 +120,42 @@ export function getProjectPaths(config: MetaConfig): string[] {
 
 export function getProjectUrl(config: MetaConfig, path: string): string | undefined {
   return config.projects[path];
+}
+
+export interface ResolvedCommand {
+  cmd: string;
+  description?: string | undefined;
+  parallel?: boolean | undefined;
+  concurrency?: number | undefined;
+  includeOnly?: string[] | undefined;
+  excludeOnly?: string[] | undefined;
+  includePattern?: string | undefined;
+  excludePattern?: string | undefined;
+}
+
+export function normalizeCommand(config: CommandConfig): ResolvedCommand {
+  if (typeof config === 'string') {
+    return { cmd: config };
+  }
+  return config;
+}
+
+export function getCommand(metaConfig: MetaConfig, name: string): ResolvedCommand | undefined {
+  const commands = metaConfig.commands;
+  if (!commands) {
+    return undefined;
+  }
+  const command = commands[name];
+  if (command === undefined) {
+    return undefined;
+  }
+  return normalizeCommand(command);
+}
+
+export function listCommands(metaConfig: MetaConfig): Array<{ name: string; command: ResolvedCommand }> {
+  const commands = metaConfig.commands ?? {};
+  return Object.entries(commands).map(([name, config]) => ({
+    name,
+    command: normalizeCommand(config),
+  }));
 }

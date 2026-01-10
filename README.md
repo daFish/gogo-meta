@@ -54,9 +54,9 @@ gogo exec "git status" --parallel
 
 ## Configuration
 
-### .meta
+### .gogo
 
-The `.meta` file defines child repositories and ignore patterns:
+The `.gogo` file defines child repositories, ignore patterns, and predefined commands:
 
 ```json
 {
@@ -65,7 +65,21 @@ The `.meta` file defines child repositories and ignore patterns:
     "web": "git@github.com:org/web.git",
     "libs/shared": "git@github.com:org/shared.git"
   },
-  "ignore": [".git", "node_modules", ".vagrant", ".vscode"]
+  "ignore": [".git", "node_modules", ".vagrant", ".vscode"],
+  "commands": {
+    "build": "npm run build",
+    "test": {
+      "cmd": "npm test",
+      "parallel": true,
+      "description": "Run tests in all projects"
+    },
+    "deploy": {
+      "cmd": "npm run deploy",
+      "parallel": true,
+      "concurrency": 2,
+      "includeOnly": ["api", "web"]
+    }
+  }
 }
 ```
 
@@ -98,16 +112,16 @@ These options are available for most commands:
 
 ### `gogo init`
 
-Initialize a new gogo-meta repository by creating a `.meta` file.
+Initialize a new gogo-meta repository by creating a `.gogo` file.
 
 ```bash
 gogo init
-gogo init --force  # Overwrite existing .meta file
+gogo init --force  # Overwrite existing .gogo file
 ```
 
 | Option | Description |
 |--------|-------------|
-| `-f, --force` | Overwrite existing `.meta` file |
+| `-f, --force` | Overwrite existing `.gogo` file |
 
 ---
 
@@ -146,6 +160,42 @@ gogo exec "npm test" --include-pattern "^libs/"
 
 ---
 
+### `gogo run [name]`
+
+Run a predefined command from the `.gogo` file.
+
+```bash
+# List available commands
+gogo run
+gogo run --list
+
+# Run a predefined command
+gogo run build
+
+# Override config options with CLI flags
+gogo run test --parallel
+gogo run deploy --include-only api
+
+# Commands can define defaults in .gogo:
+# - parallel: true/false
+# - concurrency: number
+# - includeOnly/excludeOnly: array of directories
+# - includePattern/excludePattern: regex patterns
+# CLI flags override these config defaults
+```
+
+| Option | Description |
+|--------|-------------|
+| `-l, --list` | List all available commands |
+| `--include-only <dirs>` | Only run in specified directories (overrides config) |
+| `--exclude-only <dirs>` | Skip specified directories (overrides config) |
+| `--include-pattern <regex>` | Include directories matching pattern (overrides config) |
+| `--exclude-pattern <regex>` | Exclude directories matching pattern (overrides config) |
+| `--parallel` | Run commands concurrently (overrides config) |
+| `--concurrency <n>` | Max parallel processes (overrides config) |
+
+---
+
 ### `gogo git clone <url>`
 
 Clone a meta repository and all its child repositories.
@@ -166,7 +216,7 @@ gogo git clone git@github.com:org/meta-repo.git -d my-project
 
 ### `gogo git update`
 
-Clone any child repositories defined in `.meta` that don't exist locally.
+Clone any child repositories defined in `.gogo` that don't exist locally.
 
 ```bash
 gogo git update
@@ -314,7 +364,7 @@ This will:
 1. Create the directory
 2. Initialize git
 3. Add the remote origin
-4. Add the project to `.meta`
+4. Add the project to `.gogo`
 5. Add the path to `.gitignore`
 
 ---
@@ -333,7 +383,7 @@ gogo project import existing-folder
 
 This will:
 1. Clone the repository (if URL provided and directory doesn't exist)
-2. Add the project to `.meta`
+2. Add the project to `.gogo`
 3. Add the path to `.gitignore`
 
 ---

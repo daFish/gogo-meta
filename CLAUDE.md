@@ -4,7 +4,7 @@ A modern TypeScript CLI for managing multi-repository projects. Reimplementation
 
 ## Project Overview
 
-gogo-meta allows developers to manage multiple git repositories as a unified system. It executes commands across all child repositories defined in a `.meta` configuration file.
+gogo-meta allows developers to manage multiple git repositories as a unified system. It executes commands across all child repositories defined in a `.gogo` configuration file.
 
 ## Tech Stack
 
@@ -24,11 +24,12 @@ src/
 ├── commands/
 │   ├── init.ts            # gogo init
 │   ├── exec.ts            # gogo exec
+│   ├── run.ts             # gogo run (predefined commands)
 │   ├── git/               # Git subcommands (clone, update, status, etc.)
 │   ├── project/           # Project management (create, import)
 │   └── npm/               # NPM operations (install, link, run)
 ├── core/
-│   ├── config.ts          # .meta file parsing and manipulation
+│   ├── config.ts          # .gogo file parsing and manipulation
 │   ├── executor.ts        # Shell command execution
 │   ├── filter.ts          # Include/exclude filtering logic
 │   ├── loop.ts            # Multi-repo command orchestration
@@ -52,8 +53,9 @@ pnpm typecheck      # Type check without emitting
 ## CLI Usage
 
 ```bash
-gogo init                          # Create .meta file
+gogo init                          # Create .gogo file
 gogo exec "<command>" [--parallel] # Run command across repos
+gogo run [name]                    # Run predefined command from .gogo
 gogo git clone <url>               # Clone meta + children
 gogo git update                    # Clone missing repos
 gogo git status|pull|push|branch|checkout|commit
@@ -78,13 +80,17 @@ gogo npm install|ci|link|run
 
 ## Configuration Files
 
-### .meta (project config)
+### .gogo (project config)
 ```json
 {
   "projects": {
     "path/to/repo": "git@github.com:org/repo.git"
   },
-  "ignore": [".git", "node_modules"]
+  "ignore": [".git", "node_modules"],
+  "commands": {
+    "build": "npm run build",
+    "test": { "cmd": "npm test", "parallel": true }
+  }
 }
 ```
 

@@ -27,14 +27,14 @@ describe('init command', () => {
     vi.restoreAllMocks();
   });
 
-  it('creates .meta file with default config', async () => {
+  it('creates .gogo file with default config', async () => {
     vol.fromJSON({ '/project': null });
 
     await initCommand();
 
-    expect(vol.existsSync('/project/.meta')).toBe(true);
+    expect(vol.existsSync('/project/.gogo')).toBe(true);
 
-    const content = vol.readFileSync('/project/.meta', 'utf-8') as string;
+    const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
     const config = JSON.parse(content);
 
     expect(config.projects).toEqual({});
@@ -42,22 +42,22 @@ describe('init command', () => {
     expect(config.ignore).toContain('node_modules');
   });
 
-  it('throws error if .meta already exists', async () => {
+  it('throws error if .gogo already exists', async () => {
     vol.fromJSON({
-      '/project/.meta': '{"projects":{}}',
+      '/project/.gogo': '{"projects":{}}',
     });
 
     await expect(initCommand()).rejects.toThrow('already exists');
   });
 
-  it('overwrites existing .meta when force is true', async () => {
+  it('overwrites existing .gogo when force is true', async () => {
     vol.fromJSON({
-      '/project/.meta': '{"projects":{"old":"url"}}',
+      '/project/.gogo': '{"projects":{"old":"url"}}',
     });
 
     await initCommand({ force: true });
 
-    const content = vol.readFileSync('/project/.meta', 'utf-8') as string;
+    const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
     const config = JSON.parse(content);
 
     expect(config.projects).toEqual({});
@@ -74,7 +74,7 @@ describe('init command', () => {
 
   it('logs warning when overwriting', async () => {
     vol.fromJSON({
-      '/project/.meta': '{}',
+      '/project/.gogo': '{}',
     });
     const output = await import('../../src/core/output.js');
 

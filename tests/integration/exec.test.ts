@@ -41,7 +41,7 @@ describe('exec command', () => {
 
   it('executes command across all projects', async () => {
     vol.fromJSON({
-      '/project/.meta': JSON.stringify({
+      '/project/.gogo': JSON.stringify({
         projects: {
           api: 'git@github.com:org/api.git',
           web: 'git@github.com:org/web.git',
@@ -69,7 +69,7 @@ describe('exec command', () => {
 
   it('respects includeOnly filter', async () => {
     vol.fromJSON({
-      '/project/.meta': JSON.stringify({
+      '/project/.gogo': JSON.stringify({
         projects: {
           api: 'url1',
           web: 'url2',
@@ -89,7 +89,7 @@ describe('exec command', () => {
 
   it('respects excludeOnly filter', async () => {
     vol.fromJSON({
-      '/project/.meta': JSON.stringify({
+      '/project/.gogo': JSON.stringify({
         projects: {
           api: 'url1',
           web: 'url2',
@@ -109,7 +109,7 @@ describe('exec command', () => {
 
   it('sets exit code on failure', async () => {
     vol.fromJSON({
-      '/project/.meta': JSON.stringify({
+      '/project/.gogo': JSON.stringify({
         projects: { api: 'url' },
         ignore: [],
       }),
@@ -124,7 +124,7 @@ describe('exec command', () => {
 
   it('logs info message with command', async () => {
     vol.fromJSON({
-      '/project/.meta': JSON.stringify({
+      '/project/.gogo': JSON.stringify({
         projects: { api: 'url' },
         ignore: [],
       }),

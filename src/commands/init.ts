@@ -31,7 +31,7 @@ export function registerInitCommand(program: Command): void {
   program
     .command('init')
     .description('Initialize a new gogo-meta repository')
-    .option('-f, --force', 'Overwrite existing .meta file')
+    .option('-f, --force', 'Overwrite existing .gogo file')
     .action(async (options: InitOptions) => {
       await initCommand(options);
     });

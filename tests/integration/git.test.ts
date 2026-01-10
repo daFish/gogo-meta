@@ -44,7 +44,7 @@ describe('git commands', () => {
   describe('update command', () => {
     it('clones missing repositories', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({
+        '/project/.gogo': JSON.stringify({
           projects: {
             api: 'git@github.com:org/api.git',
             web: 'git@github.com:org/web.git',
@@ -67,7 +67,7 @@ describe('git commands', () => {
 
     it('reports all cloned when no missing repos', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({
+        '/project/.gogo': JSON.stringify({
           projects: { api: 'url' },
           ignore: [],
         }),
@@ -91,7 +91,7 @@ describe('git commands', () => {
 
     it('respects filters', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({
+        '/project/.gogo': JSON.stringify({
           projects: {
             api: 'url1',
             web: 'url2',
@@ -112,7 +112,7 @@ describe('git commands', () => {
   describe('status command', () => {
     it('runs git status in all projects', async () => {
       vol.fromJSON({
-        '/project/.meta': JSON.stringify({
+        '/project/.gogo': JSON.stringify({
           projects: {
             api: 'url1',
             web: 'url2',

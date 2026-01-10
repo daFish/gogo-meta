@@ -11,7 +11,8 @@
       "Bash(node:*)",
       "Bash(pnpm test:coverage:*)",
       "Bash(pnpm add:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(pnpm typecheck:*)"
     ]
   }
 }

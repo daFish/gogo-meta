@@ -10,7 +10,7 @@
     }
   },
   "bin": {
-    "gogo": "./bin/gogo.js"
+    "gogo": "./bin/gogo"
   },
   "files": [
     "dist",

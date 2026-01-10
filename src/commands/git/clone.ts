@@ -35,9 +35,9 @@ export async function cloneCommand(url: string, options: CloneOptions = {}): Pro
 
   output.success(`Cloned meta repository to ${repoName}`);
 
-  const metaPath = join(targetDir, '.meta');
+  const metaPath = join(targetDir, '.gogo');
   if (!(await fileExists(metaPath))) {
-    output.warning('No .meta file found in cloned repository');
+    output.warning('No .gogo file found in cloned repository');
     return;
   }
 
@@ -45,7 +45,7 @@ export async function cloneCommand(url: string, options: CloneOptions = {}): Pro
   const projects = Object.entries(config.projects);
 
   if (projects.length === 0) {
-    output.info('No child repositories defined in .meta');
+    output.info('No child repositories defined in .gogo');
     return;
   }
 
