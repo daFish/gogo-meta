@@ -11,7 +11,6 @@ import {
   findFileUp,
   fileExists,
   ConfigError,
-  META_FILE,
   normalizeCommand,
   getCommand,
   listCommands,

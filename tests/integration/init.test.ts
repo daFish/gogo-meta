@@ -18,8 +18,6 @@ describe('init command', () => {
   beforeEach(() => {
     vol.reset();
     vi.clearAllMocks();
-
-    const originalCwd = process.cwd;
     vi.spyOn(process, 'cwd').mockReturnValue('/project');
   });
 

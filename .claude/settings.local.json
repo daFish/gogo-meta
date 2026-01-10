@@ -14,7 +14,11 @@
       "Bash(tree:*)",
       "Bash(pnpm typecheck:*)",
       "Bash(gh run view:*)",
-      "Bash(bun run test)"
+      "Bash(bun run test)",
+      "Bash(bun add:*)",
+      "Bash(bun run lint)",
+      "Bash(bun run test:unit:*)",
+      "Bash(gh run list:*)"
     ]
   }
 }

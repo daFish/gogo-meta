@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { vol } from 'memfs';
 import { loop, hasFailures, getExitCode, type LoopContext } from '../../../src/core/loop.js';
-import type { MetaConfig, ExecutorResult } from '../../../src/types/index.js';
 
 vi.mock('node:fs/promises', async () => {
   const memfs = await import('memfs');

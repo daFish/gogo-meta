@@ -43,7 +43,7 @@ async function createSymlink(target: string, linkPath: string): Promise<boolean>
 
     await symlink(target, linkPath, 'dir');
     return true;
-  } catch (error) {
+  } catch {
     output.error(`Failed to create symlink: ${linkPath} -> ${target}`);
     return false;
   }

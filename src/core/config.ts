@@ -107,7 +107,7 @@ export function addProject(config: MetaConfig, path: string, url: string): MetaC
 }
 
 export function removeProject(config: MetaConfig, path: string): MetaConfig {
-  const { [path]: _, ...remainingProjects } = config.projects;
+  const { [path]: _removed, ...remainingProjects } = config.projects;
   return {
     ...config,
     projects: remainingProjects,

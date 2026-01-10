@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { readMetaConfig, getMetaDir, fileExists } from '../../core/config.js';
 import { loop, getExitCode } from '../../core/loop.js';
-import { createFilterOptions, applyFilters } from '../../core/filter.js';
+import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 import type { ExecutorResult } from '../../types/index.js';
 
@@ -45,7 +45,7 @@ export async function runCommand(script: string, options: RunOptions = {}): Prom
   output.info(`Running "npm run ${script}" across repositories...`);
 
   const command = options.ifPresent
-    ? async (dir: string, projectPath: string): Promise<ExecutorResult> => {
+    ? async (dir: string, _projectPath: string): Promise<ExecutorResult> => {
         const hasScriptResult = await hasScript(dir, script);
         if (!hasScriptResult) {
           return {
@@ -59,9 +59,6 @@ export async function runCommand(script: string, options: RunOptions = {}): Prom
         return execute(`npm run ${script}`, { cwd: dir });
       }
     : `npm run ${script}`;
-
-  let projectPaths = Object.keys(config.projects);
-  projectPaths = applyFilters(projectPaths, filterOptions);
 
   if (options.ifPresent && typeof command === 'function') {
     const results = await loop(command, { config, metaDir }, {

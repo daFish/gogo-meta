@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import type { ExecutorOptions, ExecutorResult } from '../types/index.js';
 
 const DEFAULT_TIMEOUT = 300_000; // 5 minutes
@@ -59,7 +59,6 @@ export async function execute(command: string, options: ExecutorOptions): Promis
 }
 
 export function executeSync(command: string, options: ExecutorOptions): ExecutorResult {
-  const { execSync } = require('node:child_process');
   const { cwd, env = process.env, timeout = DEFAULT_TIMEOUT, shell = true } = options;
 
   try {
