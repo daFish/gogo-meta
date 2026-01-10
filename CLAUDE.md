@@ -41,13 +41,13 @@ src/
 ## Commands
 
 ```bash
-pnpm install        # Install dependencies
-pnpm build          # Build to dist/
-pnpm dev            # Build in watch mode
-pnpm test:unit      # Run unit tests
-pnpm test:integration  # Run integration tests
-pnpm test:coverage  # Run tests with coverage
-pnpm typecheck      # Type check without emitting
+bun install         # Install dependencies
+bun run build       # Build to dist/
+bun run dev         # Build in watch mode
+bun run test:unit   # Run unit tests
+bun run test:integration  # Run integration tests
+bun run test:coverage  # Run tests with coverage
+bun run typecheck   # Type check without emitting
 ```
 
 ## CLI Usage

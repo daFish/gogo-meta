@@ -7,41 +7,38 @@ variables:
   NODE_VERSION: "22"
 
 default:
-  image: node:${NODE_VERSION}-alpine
+  image: oven/bun:latest
   before_script:
-    - corepack enable
-    - corepack prepare pnpm@latest --activate
-    - pnpm install --frozen-lockfile
+    - bun install --frozen-lockfile
 
 # Cache node_modules across jobs
 cache:
   key:
     files:
-      - pnpm-lock.yaml
+      - bun.lockb
   paths:
     - node_modules/
-    - .pnpm-store/
 
 test:unit:
   stage: test
   script:
-    - pnpm test:unit
+    - bun run test:unit
   coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
 
 test:integration:
   stage: test
   script:
-    - pnpm test:integration
+    - bun run test:integration
 
 typecheck:
   stage: test
   script:
-    - pnpm typecheck
+    - bun run typecheck
 
 build:
   stage: build
   script:
-    - pnpm build
+    - bun run build
   artifacts:
     paths:
       - dist/

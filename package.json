@@ -27,7 +27,7 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "bun run build"
   },
   "engines": {
     "node": ">=22.0.0"
