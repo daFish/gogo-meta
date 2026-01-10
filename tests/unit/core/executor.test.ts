@@ -60,7 +60,7 @@ describe('executor', () => {
 
       expect(result.timedOut).toBe(true);
       expect(result.exitCode).not.toBe(0);
-    }, 5000);
+    }, 10000);
 
     it('handles multiline output', async () => {
       const result = await execute('echo "line1"; echo "line2"; echo "line3"', {

@@ -12,7 +12,9 @@
       "Bash(pnpm test:coverage:*)",
       "Bash(pnpm add:*)",
       "Bash(tree:*)",
-      "Bash(pnpm typecheck:*)"
+      "Bash(pnpm typecheck:*)",
+      "Bash(gh run view:*)",
+      "Bash(bun run test)"
     ]
   }
 }
