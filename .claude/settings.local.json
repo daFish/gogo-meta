@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(pnpm install)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm test:unit:*)",
+      "Bash(pnpm test:integration:*)",
+      "Bash(node:*)",
+      "Bash(pnpm test:coverage:*)",
+      "Bash(pnpm add:*)",
+      "Bash(tree:*)"
+    ]
+  }
+}
