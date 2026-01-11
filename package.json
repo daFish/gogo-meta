@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@types/node": "^22.10.5",
+    "@types/node": "^25.0.0",
     "@vitest/coverage-v8": "^2.1.9",
     "eslint": "^9.39.2",
     "memfs": "^4.15.0",
