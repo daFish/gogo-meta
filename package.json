@@ -30,7 +30,7 @@
     "prepublishOnly": "bun run build"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "bun": ">=1.0.0"
   },
   "publishConfig": {
     "@gogo-meta:registry": "https://gitlab.com/api/v4/projects/${PROJECT_ID}/packages/npm/"

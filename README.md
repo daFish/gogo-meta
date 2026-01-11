@@ -29,9 +29,9 @@ npm install -g @gogo-meta/cli
 ```bash
 git clone <repository-url>
 cd gogo-meta
-pnpm install
-pnpm build
-npm link
+bun install
+bun run build
+bun link
 ```
 
 ## Quick Start
@@ -520,7 +520,7 @@ gogo git status --include-pattern "^libs/"
 
 ## Requirements
 
-- Node.js 22 or higher
+- Bun 1.x or higher
 - Git
 
 ## License

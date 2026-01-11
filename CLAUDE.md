@@ -8,13 +8,13 @@ gogo-meta allows developers to manage multiple git repositories as a unified sys
 
 ## Tech Stack
 
-- **Runtime**: Node.js 22+
+- **Runtime**: Bun 1.x
 - **Language**: TypeScript 5.x (strict mode, ESM)
 - **CLI Framework**: Commander.js
-- **Validation**: Zod
+- **Validation**: Zod 4.x
 - **Terminal Styling**: picocolors
 - **Build**: tsup
-- **Testing**: Vitest + memfs
+- **Testing**: Vitest 4.x + memfs
 
 ## Project Structure
 
