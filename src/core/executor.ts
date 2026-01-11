@@ -11,19 +11,33 @@ export async function execute(command: string, options: ExecutorOptions): Promis
     let stderr = '';
     let timedOut = false;
 
+    const isUnix = process.platform !== 'win32';
     const child = spawn(command, {
       cwd,
       env,
       shell,
       stdio: ['inherit', 'pipe', 'pipe'],
+      detached: isUnix,
     });
+
+    const killProcessGroup = (signal: NodeJS.Signals) => {
+      if (isUnix && child.pid) {
+        try {
+          process.kill(-child.pid, signal);
+        } catch {
+          child.kill(signal);
+        }
+      } else {
+        child.kill(signal);
+      }
+    };
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      killProcessGroup('SIGTERM');
       setTimeout(() => {
         if (!child.killed) {
-          child.kill('SIGKILL');
+          killProcessGroup('SIGKILL');
         }
       }, 5000);
     }, timeout);
@@ -115,16 +129,30 @@ export async function executeStreaming(
     let stderr = '';
     let timedOut = false;
 
+    const isUnix = process.platform !== 'win32';
     const child = spawn(command, {
       cwd,
       env,
       shell,
       stdio: ['inherit', 'pipe', 'pipe'],
+      detached: isUnix,
     });
+
+    const killProcessGroup = (signal: NodeJS.Signals) => {
+      if (isUnix && child.pid) {
+        try {
+          process.kill(-child.pid, signal);
+        } catch {
+          child.kill(signal);
+        }
+      } else {
+        child.kill(signal);
+      }
+    };
 
     const timeoutId = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      killProcessGroup('SIGTERM');
     }, timeout);
 
     child.stdout?.on('data', (data: Buffer) => {
