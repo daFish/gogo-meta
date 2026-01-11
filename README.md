@@ -13,19 +13,6 @@ A modern TypeScript CLI for managing multi-repository projects. Execute commands
 
 ## Installation
 
-### From GitLab Package Registry
-
-```bash
-# Configure registry (replace PROJECT_ID with your GitLab project ID)
-npm config set @gogo-meta:registry https://gitlab.com/api/v4/projects/PROJECT_ID/packages/npm/
-npm config set '//gitlab.com/api/v4/projects/PROJECT_ID/packages/npm/:_authToken' "${GITLAB_TOKEN}"
-
-# Install globally
-npm install -g @gogo-meta/cli
-```
-
-### From Source
-
 ```bash
 git clone <repository-url>
 cd gogo-meta

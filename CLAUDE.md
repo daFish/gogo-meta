@@ -100,10 +100,3 @@ gogo npm install|ci|link|run
   "ignore": ["docs", "examples"]
 }
 ```
-
-## Distribution
-
-Package is configured for GitLab Package Registry. Update `PROJECT_ID` in:
-- `package.json` (publishConfig)
-- `.npmrc`
-- `.gitlab-ci.yml` (automatically uses CI variables)
