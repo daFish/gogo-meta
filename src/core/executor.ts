@@ -1,4 +1,4 @@
-import { spawn, execSync } from 'node:child_process';
+import { spawn, execSync, type ExecSyncOptions } from 'node:child_process';
 import type { ExecutorOptions, ExecutorResult } from '../types/index.js';
 
 const DEFAULT_TIMEOUT = 300_000; // 5 minutes
@@ -58,22 +58,28 @@ export async function execute(command: string, options: ExecutorOptions): Promis
   });
 }
 
+function getShellPath(shell: boolean | undefined): string | undefined {
+  if (shell === false || shell === undefined) return undefined;
+  return process.platform === 'win32' ? process.env['ComSpec'] || 'cmd.exe' : '/bin/sh';
+}
+
 export function executeSync(command: string, options: ExecutorOptions): ExecutorResult {
   const { cwd, env = process.env, timeout = DEFAULT_TIMEOUT, shell = true } = options;
 
   try {
-    const result = execSync(command, {
+    const execOptions: ExecSyncOptions = {
       cwd,
       env,
-      shell,
+      shell: getShellPath(shell),
       timeout,
       encoding: 'utf-8',
       stdio: ['inherit', 'pipe', 'pipe'],
-    });
+    };
+    const result = execSync(command, execOptions) as string;
 
     return {
       exitCode: 0,
-      stdout: typeof result === 'string' ? result.trim() : '',
+      stdout: result.trim(),
       stderr: '',
       timedOut: false,
     };
