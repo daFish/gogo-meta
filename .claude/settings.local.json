@@ -18,7 +18,10 @@
       "Bash(bun add:*)",
       "Bash(bun run lint)",
       "Bash(bun run test:unit:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(bun run build:*)",
+      "Bash(bun run typecheck:*)",
+      "Bash(bun run release:dry-run:*)"
     ]
   }
 }
