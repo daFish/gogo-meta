@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/daFish/gogo-meta/compare/v1.0.0...v1.1.0) (2026-01-19)
+
+
+### Features
+
+* add option --no-clone when importing projects ([450ef99](https://github.com/daFish/gogo-meta/commit/450ef99a22b4d89ffcd8a3365e3ddff540950064))
+
 # 1.0.0 (2026-01-12)
 
 
