@@ -10,6 +10,10 @@ import {
 } from '../../core/config.js';
 import * as output from '../../core/output.js';
 
+interface ImportOptions {
+  noClone?: boolean;
+}
+
 async function getRemoteUrl(dir: string): Promise<string | null> {
   const result = await execute('git remote get-url origin', { cwd: dir });
   if (result.exitCode === 0 && result.stdout) {
@@ -18,7 +22,11 @@ async function getRemoteUrl(dir: string): Promise<string | null> {
   return null;
 }
 
-export async function importCommand(folder: string, url?: string): Promise<void> {
+export async function importCommand(
+  folder: string,
+  url?: string,
+  options: ImportOptions = {}
+): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -55,6 +63,15 @@ export async function importCommand(folder: string, url?: string): Promise<void>
   } else {
     if (!url) {
       throw new Error('URL is required when importing a non-existent project');
+    }
+
+    if (options.noClone) {
+      const config = await readMetaConfig(metaDir);
+      const updatedConfig = addProject(config, folder, url);
+      await writeMetaConfig(metaDir, updatedConfig);
+      output.success(`Registered project "${folder}" (not cloned)`);
+      output.info(`Run "gogo git update" to clone missing projects`);
+      return;
     }
 
     output.info(`Cloning ${url} into ${folder}...`);

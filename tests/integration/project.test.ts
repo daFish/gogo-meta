@@ -188,5 +188,34 @@ describe('project commands', () => {
 
       expect(config.projects.api).toBe('git@github.com:org/api.git');
     });
+
+    it('registers project without cloning when --no-clone is used', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
+      });
+
+      await importCommand('libs/external', 'git@github.com:org/external.git', { noClone: true });
+
+      expect(mockExecute).not.toHaveBeenCalled();
+
+      const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
+      const config = JSON.parse(content);
+
+      expect(config.projects['libs/external']).toBe('git@github.com:org/external.git');
+      expect(vol.existsSync('/project/libs/external')).toBe(false);
+    });
+
+    it('does not modify .gitignore when --no-clone is used', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gitignore': 'node_modules\n',
+      });
+
+      await importCommand('libs/external', 'git@github.com:org/external.git', { noClone: true });
+
+      const gitignore = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(gitignore).toBe('node_modules\n');
+      expect(gitignore).not.toContain('libs/external');
+    });
   });
 });

@@ -17,7 +17,8 @@ export function registerProjectCommands(program: Command): void {
   project
     .command('import <folder> [url]')
     .description('Import an existing repository as a child project')
-    .action(async (folder: string, url?: string) => {
-      await importCommand(folder, url);
+    .option('--no-clone', 'Register project without cloning')
+    .action(async (folder: string, url: string | undefined, options: { clone?: boolean }) => {
+      await importCommand(folder, url, { noClone: options.clone === false });
     });
 }

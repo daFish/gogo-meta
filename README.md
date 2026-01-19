@@ -366,12 +366,19 @@ gogo project import api git@github.com:org/api.git
 
 # Import an existing local directory (reads remote from git)
 gogo project import existing-folder
+
+# Register without cloning (clone later with gogo git update)
+gogo project import api git@github.com:org/api.git --no-clone
 ```
 
+| Option | Description |
+|--------|-------------|
+| `--no-clone` | Register project in `.gogo` without cloning |
+
 This will:
-1. Clone the repository (if URL provided and directory doesn't exist)
+1. Clone the repository (if URL provided and directory doesn't exist, unless `--no-clone`)
 2. Add the project to `.gogo`
-3. Add the path to `.gitignore`
+3. Add the path to `.gitignore` (unless `--no-clone`)
 
 ---
 
