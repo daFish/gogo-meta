@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/daFish/gogo-meta/compare/v1.1.0...v1.1.1) (2026-01-27)
+
+
+### Bug Fixes
+
+* add SSH host key verification before cloning repositories ([3aba347](https://github.com/daFish/gogo-meta/commit/3aba3479ccad8ee2bce6f5a13c36117d3a110bb5)), closes [#12](https://github.com/daFish/gogo-meta/issues/12)
+
 # [1.1.0](https://github.com/daFish/gogo-meta/compare/v1.0.0...v1.1.0) (2026-01-19)
 
 
