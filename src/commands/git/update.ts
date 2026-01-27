@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { execute } from '../../core/executor.js';
 import { readMetaConfig, getMetaDir, fileExists } from '../../core/config.js';
 import { applyFilters, createFilterOptions } from '../../core/filter.js';
+import { ensureSshHostsKnown } from '../../core/ssh.js';
 import * as output from '../../core/output.js';
 
 interface UpdateOptions {
@@ -49,6 +50,16 @@ export async function updateCommand(options: UpdateOptions = {}): Promise<void> 
   if (missing.length === 0) {
     output.success('All repositories are already cloned');
     return;
+  }
+
+  // Ensure SSH host keys are known before attempting to clone
+  const urls = missing.map(([, url]) => url);
+  const { failed: failedHosts } = await ensureSshHostsKnown(urls);
+
+  if (failedHosts.length > 0) {
+    output.warning(
+      `Could not verify SSH host keys for: ${failedHosts.join(', ')}. Clone may fail.`
+    );
   }
 
   output.info(`Cloning ${missing.length} missing repositories...`);

@@ -10,6 +10,7 @@ vi.mock('node:fs/promises', async () => {
 
 vi.mock('../../src/core/executor.js', () => ({
   execute: vi.fn(),
+  executeSync: vi.fn(() => ({ exitCode: 0, stdout: '', stderr: '', timedOut: false })),
 }));
 
 vi.mock('../../src/core/output.js', () => ({
