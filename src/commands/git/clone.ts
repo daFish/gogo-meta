@@ -2,6 +2,7 @@ import { join, basename } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { execute } from '../../core/executor.js';
 import { readMetaConfig, fileExists } from '../../core/config.js';
+import { ensureSshHostsKnown } from '../../core/ssh.js';
 import * as output from '../../core/output.js';
 
 interface CloneOptions {
@@ -21,6 +22,9 @@ export async function cloneCommand(url: string, options: CloneOptions = {}): Pro
   if (await fileExists(targetDir)) {
     throw new Error(`Directory "${repoName}" already exists`);
   }
+
+  // Ensure SSH host key is known for the meta repository
+  await ensureSshHostsKnown([url]);
 
   output.info(`Cloning meta repository: ${url}`);
 
@@ -47,6 +51,16 @@ export async function cloneCommand(url: string, options: CloneOptions = {}): Pro
   if (projects.length === 0) {
     output.info('No child repositories defined in .gogo');
     return;
+  }
+
+  // Ensure SSH host keys are known before attempting to clone
+  const urls = projects.map(([, url]) => url);
+  const { failed: failedHosts } = await ensureSshHostsKnown(urls);
+
+  if (failedHosts.length > 0) {
+    output.warning(
+      `Could not verify SSH host keys for: ${failedHosts.join(', ')}. Clone may fail.`
+    );
   }
 
   output.info(`Cloning ${projects.length} child repositories...`);
