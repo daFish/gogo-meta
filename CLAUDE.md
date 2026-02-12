@@ -81,6 +81,7 @@ gogo npm install|ci|link|run
 ## Configuration Files
 
 ### .gogo (project config)
+
 ```json
 {
   "projects": {
@@ -95,6 +96,7 @@ gogo npm install|ci|link|run
 ```
 
 ### .looprc (optional filtering)
+
 ```json
 {
   "ignore": ["docs", "examples"]
