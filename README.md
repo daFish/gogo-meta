@@ -13,8 +13,44 @@ A modern TypeScript CLI for managing multi-repository projects. Execute commands
 
 ## Installation
 
+### npm (recommended)
+
 ```bash
-git clone <repository-url>
+npm install -g @dafish/gogo-meta
+```
+
+Or run without installing:
+
+```bash
+npx @dafish/gogo-meta --help
+```
+
+### Docker
+
+```bash
+docker pull ghcr.io/dafish/gogo-meta
+```
+
+When using Docker, mount your working directory and SSH keys so gogo can access your repositories:
+
+```bash
+docker run -it --rm \
+  -v "$PWD":/workspace \
+  -v "$HOME/.ssh":/root/.ssh:ro \
+  -w /workspace \
+  ghcr.io/dafish/gogo-meta <command>
+```
+
+Any `gogo` command shown in this README can be run via Docker by replacing `gogo` with the `docker run` call above. For convenience, you can create a shell alias:
+
+```bash
+alias gogo='docker run -it --rm -v "$PWD":/workspace -v "$HOME/.ssh":/root/.ssh:ro -w /workspace ghcr.io/dafish/gogo-meta'
+```
+
+### From source
+
+```bash
+git clone https://github.com/daFish/gogo-meta.git
 cd gogo-meta
 bun install
 bun run build
@@ -514,8 +550,9 @@ gogo git status --include-pattern "^libs/"
 
 ## Requirements
 
-- Bun 1.x or higher
-- Git
+- **npm install**: Node.js 24 or higher, Git
+- **Docker**: Docker
+- **From source**: Bun 1.x or higher, Git
 
 ## License
 
