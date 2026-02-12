@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/daFish/gogo-meta/compare/v1.1.1...v1.2.0) (2026-02-12)
+
+
+### Features
+
+* add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
+
 ## [1.1.1](https://github.com/daFish/gogo-meta/compare/v1.1.0...v1.1.1) (2026-01-27)
 
 

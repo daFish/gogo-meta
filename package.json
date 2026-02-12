@@ -1,6 +1,6 @@
 {
   "name": "@dafish/gogo-meta",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "A modern CLI for managing multi-repository projects. Simplifies onboarding and enables sharing common agentic coding configurations across teams.",
   "type": "module",
   "publishConfig": {
