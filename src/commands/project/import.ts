@@ -1,11 +1,12 @@
 import { join, basename } from 'node:path';
-import { mkdir, appendFile } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { execute } from '../../core/executor.js';
 import {
   readMetaConfig,
   writeMetaConfig,
   getMetaDir,
   addProject,
+  addToGitignore,
   fileExists,
 } from '../../core/config.js';
 import * as output from '../../core/output.js';
@@ -69,7 +70,11 @@ export async function importCommand(
       const config = await readMetaConfig(metaDir);
       const updatedConfig = addProject(config, folder, url);
       await writeMetaConfig(metaDir, updatedConfig);
+      const added = await addToGitignore(metaDir, folder);
       output.success(`Registered project "${folder}" (not cloned)`);
+      if (added) {
+        output.info(`Added ${folder} to .gitignore`);
+      }
       output.info(`Run "gogo git update" to clone missing projects`);
       return;
     }
@@ -94,9 +99,8 @@ export async function importCommand(
     output.success(`Imported project "${folder}"`);
   }
 
-  const gitignorePath = join(metaDir, '.gitignore');
-  if (await fileExists(gitignorePath)) {
-    await appendFile(gitignorePath, `\n${folder}\n`);
+  const added = await addToGitignore(metaDir, folder);
+  if (added) {
     output.info(`Added ${folder} to .gitignore`);
   }
 }

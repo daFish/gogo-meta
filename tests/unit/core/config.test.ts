@@ -10,6 +10,7 @@ import {
   getProjectUrl,
   findFileUp,
   fileExists,
+  addToGitignore,
   ConfigError,
   normalizeCommand,
   getCommand,
@@ -133,6 +134,57 @@ describe('config', () => {
       vol.fromJSON({});
 
       expect(await fileExists('/nonexistent')).toBe(false);
+    });
+  });
+
+  describe('addToGitignore', () => {
+    it('creates .gitignore if it does not exist', async () => {
+      vol.fromJSON({ '/project': null });
+
+      const added = await addToGitignore('/project', 'api');
+
+      expect(added).toBe(true);
+      expect(vol.existsSync('/project/.gitignore')).toBe(true);
+      const content = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(content).toBe('api\n');
+    });
+
+    it('appends entry to existing .gitignore', async () => {
+      vol.fromJSON({ '/project/.gitignore': 'node_modules\n' });
+
+      const added = await addToGitignore('/project', 'api');
+
+      expect(added).toBe(true);
+      const content = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(content).toBe('node_modules\napi\n');
+    });
+
+    it('returns false and skips if entry already exists', async () => {
+      vol.fromJSON({ '/project/.gitignore': 'node_modules\napi\n' });
+
+      const added = await addToGitignore('/project', 'api');
+
+      expect(added).toBe(false);
+      const content = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(content).toBe('node_modules\napi\n');
+    });
+
+    it('handles .gitignore without trailing newline', async () => {
+      vol.fromJSON({ '/project/.gitignore': 'node_modules' });
+
+      const added = await addToGitignore('/project', 'api');
+
+      expect(added).toBe(true);
+      const content = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(content).toBe('node_modules\napi\n');
+    });
+
+    it('handles entry with surrounding whitespace in file', async () => {
+      vol.fromJSON({ '/project/.gitignore': '  api  \nnode_modules\n' });
+
+      const added = await addToGitignore('/project', 'api');
+
+      expect(added).toBe(false);
     });
   });
 

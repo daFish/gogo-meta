@@ -205,7 +205,7 @@ describe('project commands', () => {
       expect(vol.existsSync('/project/libs/external')).toBe(false);
     });
 
-    it('does not modify .gitignore when --no-clone is used', async () => {
+    it('adds project to .gitignore when --no-clone is used', async () => {
       vol.fromJSON({
         '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
         '/project/.gitignore': 'node_modules\n',
@@ -214,8 +214,36 @@ describe('project commands', () => {
       await importCommand('libs/external', 'git@github.com:org/external.git', { noClone: true });
 
       const gitignore = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
-      expect(gitignore).toBe('node_modules\n');
-      expect(gitignore).not.toContain('libs/external');
+      expect(gitignore).toContain('libs/external');
+    });
+
+    it('creates .gitignore if it does not exist', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
+      });
+
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await importCommand('api', 'git@github.com:org/api.git');
+
+      expect(vol.existsSync('/project/.gitignore')).toBe(true);
+      const gitignore = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(gitignore).toContain('api');
+    });
+
+    it('does not add duplicate entries to .gitignore', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: {}, ignore: [] }),
+        '/project/.gitignore': 'node_modules\napi\n',
+      });
+
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await importCommand('api', 'git@github.com:org/api.git');
+
+      const gitignore = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      const apiMatches = gitignore.match(/^api$/gm);
+      expect(apiMatches).toHaveLength(1);
     });
   });
 });
