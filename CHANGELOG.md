@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/daFish/gogo-meta/compare/v1.2.0...v1.3.0) (2026-02-12)
+
+
+### Features
+
+* build a container image if a new release was published ([eb055e1](https://github.com/daFish/gogo-meta/commit/eb055e1aa05638e97b0c1c90793f80f07faa233b))
+
 # [1.2.0](https://github.com/daFish/gogo-meta/compare/v1.1.1...v1.2.0) (2026-02-12)
 
 
