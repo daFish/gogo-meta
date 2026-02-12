@@ -122,14 +122,14 @@ Define default ignore patterns for command execution:
 
 These options are available for most commands:
 
-| Option | Description |
-|--------|-------------|
-| `--include-only <dirs>` | Only target specified directories (comma-separated) |
-| `--exclude-only <dirs>` | Exclude specified directories (comma-separated) |
-| `--include-pattern <regex>` | Include directories matching regex pattern |
-| `--exclude-pattern <regex>` | Exclude directories matching regex pattern |
-| `--parallel` | Execute commands concurrently |
-| `--concurrency <n>` | Maximum parallel processes (default: 4) |
+| Option                      | Description                                         |
+| --------------------------- | --------------------------------------------------- |
+| `--include-only <dirs>`     | Only target specified directories (comma-separated) |
+| `--exclude-only <dirs>`     | Exclude specified directories (comma-separated)     |
+| `--include-pattern <regex>` | Include directories matching regex pattern          |
+| `--exclude-pattern <regex>` | Exclude directories matching regex pattern          |
+| `--parallel`                | Execute commands concurrently                       |
+| `--concurrency <n>`         | Maximum parallel processes (default: 4)             |
 
 ---
 
@@ -142,8 +142,8 @@ gogo init
 gogo init --force  # Overwrite existing .gogo file
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option        | Description                     |
+| ------------- | ------------------------------- |
 | `-f, --force` | Overwrite existing `.gogo` file |
 
 ---
@@ -172,14 +172,14 @@ gogo exec "npm install" --exclude-only docs
 gogo exec "npm test" --include-pattern "^libs/"
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--include-only <dirs>` | Only run in specified directories |
-| `--exclude-only <dirs>` | Skip specified directories |
+| Option                      | Description                          |
+| --------------------------- | ------------------------------------ |
+| `--include-only <dirs>`     | Only run in specified directories    |
+| `--exclude-only <dirs>`     | Skip specified directories           |
 | `--include-pattern <regex>` | Include directories matching pattern |
 | `--exclude-pattern <regex>` | Exclude directories matching pattern |
-| `--parallel` | Run commands concurrently |
-| `--concurrency <n>` | Max parallel processes |
+| `--parallel`                | Run commands concurrently            |
+| `--concurrency <n>`         | Max parallel processes               |
 
 ---
 
@@ -207,15 +207,15 @@ gogo run deploy --include-only api
 # CLI flags override these config defaults
 ```
 
-| Option | Description |
-|--------|-------------|
-| `-l, --list` | List all available commands |
-| `--include-only <dirs>` | Only run in specified directories (overrides config) |
-| `--exclude-only <dirs>` | Skip specified directories (overrides config) |
+| Option                      | Description                                             |
+| --------------------------- | ------------------------------------------------------- |
+| `-l, --list`                | List all available commands                             |
+| `--include-only <dirs>`     | Only run in specified directories (overrides config)    |
+| `--exclude-only <dirs>`     | Skip specified directories (overrides config)           |
 | `--include-pattern <regex>` | Include directories matching pattern (overrides config) |
 | `--exclude-pattern <regex>` | Exclude directories matching pattern (overrides config) |
-| `--parallel` | Run commands concurrently (overrides config) |
-| `--concurrency <n>` | Max parallel processes (overrides config) |
+| `--parallel`                | Run commands concurrently (overrides config)            |
+| `--concurrency <n>`         | Max parallel processes (overrides config)               |
 
 ---
 
@@ -231,8 +231,8 @@ gogo git clone git@github.com:org/meta-repo.git
 gogo git clone git@github.com:org/meta-repo.git -d my-project
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option                  | Description           |
+| ----------------------- | --------------------- |
 | `-d, --directory <dir>` | Target directory name |
 
 ---
@@ -247,12 +247,12 @@ gogo git update --parallel
 gogo git update --include-only api,web
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option                  | Description                    |
+| ----------------------- | ------------------------------ |
 | `--include-only <dirs>` | Only update specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Clone in parallel |
-| `--concurrency <n>` | Max parallel clones |
+| `--exclude-only <dirs>` | Skip specified projects        |
+| `--parallel`            | Clone in parallel              |
+| `--concurrency <n>`     | Max parallel clones            |
 
 ---
 
@@ -266,11 +266,11 @@ gogo git status --parallel
 gogo git status --include-only api
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option                  | Description                   |
+| ----------------------- | ----------------------------- |
 | `--include-only <dirs>` | Only check specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Run in parallel |
+| `--exclude-only <dirs>` | Skip specified projects       |
+| `--parallel`            | Run in parallel               |
 
 ---
 
@@ -283,12 +283,12 @@ gogo git pull
 gogo git pull --parallel
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option                  | Description                  |
+| ----------------------- | ---------------------------- |
 | `--include-only <dirs>` | Only pull specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Pull in parallel |
-| `--concurrency <n>` | Max parallel pulls |
+| `--exclude-only <dirs>` | Skip specified projects      |
+| `--parallel`            | Pull in parallel             |
+| `--concurrency <n>`     | Max parallel pulls           |
 
 ---
 
@@ -301,11 +301,11 @@ gogo git push
 gogo git push --include-only api,web
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option                  | Description                  |
+| ----------------------- | ---------------------------- |
 | `--include-only <dirs>` | Only push specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Push in parallel |
+| `--exclude-only <dirs>` | Skip specified projects      |
+| `--parallel`            | Push in parallel             |
 
 ---
 
@@ -327,13 +327,13 @@ gogo git branch feature/new-feature
 gogo git branch feature/old-feature --delete
 ```
 
-| Option | Description |
-|--------|-------------|
-| `-d, --delete` | Delete the specified branch |
-| `-a, --all` | List all branches (local and remote) |
-| `--include-only <dirs>` | Only target specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Run in parallel |
+| Option                  | Description                          |
+| ----------------------- | ------------------------------------ |
+| `-d, --delete`          | Delete the specified branch          |
+| `-a, --all`             | List all branches (local and remote) |
+| `--include-only <dirs>` | Only target specified projects       |
+| `--exclude-only <dirs>` | Skip specified projects              |
+| `--parallel`            | Run in parallel                      |
 
 ---
 
@@ -349,12 +349,12 @@ gogo git checkout main
 gogo git checkout -b feature/new-feature
 ```
 
-| Option | Description |
-|--------|-------------|
-| `-b, --create` | Create the branch if it doesn't exist |
-| `--include-only <dirs>` | Only target specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Run in parallel |
+| Option                  | Description                           |
+| ----------------------- | ------------------------------------- |
+| `-b, --create`          | Create the branch if it doesn't exist |
+| `--include-only <dirs>` | Only target specified projects        |
+| `--exclude-only <dirs>` | Skip specified projects               |
+| `--parallel`            | Run in parallel                       |
 
 ---
 
@@ -367,11 +367,11 @@ gogo git commit -m "Update dependencies"
 gogo git commit -m "Fix bug" --include-only api
 ```
 
-| Option | Description |
-|--------|-------------|
-| `-m, --message <msg>` | Commit message (required) |
+| Option                  | Description                       |
+| ----------------------- | --------------------------------- |
+| `-m, --message <msg>`   | Commit message (required)         |
 | `--include-only <dirs>` | Only commit in specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
+| `--exclude-only <dirs>` | Skip specified projects           |
 
 ---
 
@@ -384,6 +384,7 @@ gogo project create libs/new-lib git@github.com:org/new-lib.git
 ```
 
 This will:
+
 1. Create the directory
 2. Initialize git
 3. Add the remote origin
@@ -407,11 +408,12 @@ gogo project import existing-folder
 gogo project import api git@github.com:org/api.git --no-clone
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option       | Description                                 |
+| ------------ | ------------------------------------------- |
 | `--no-clone` | Register project in `.gogo` without cloning |
 
 This will:
+
 1. Clone the repository (if URL provided and directory doesn't exist, unless `--no-clone`)
 2. Add the project to `.gogo`
 3. Add the path to `.gitignore` (unless `--no-clone`)
@@ -428,12 +430,12 @@ gogo npm i  # Alias
 gogo npm install --parallel
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option                  | Description                        |
+| ----------------------- | ---------------------------------- |
 | `--include-only <dirs>` | Only install in specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Run in parallel |
-| `--concurrency <n>` | Max parallel installs |
+| `--exclude-only <dirs>` | Skip specified projects            |
+| `--parallel`            | Run in parallel                    |
+| `--concurrency <n>`     | Max parallel installs              |
 
 ---
 
@@ -446,12 +448,12 @@ gogo npm ci
 gogo npm ci --parallel
 ```
 
-| Option | Description |
-|--------|-------------|
+| Option                  | Description                    |
+| ----------------------- | ------------------------------ |
 | `--include-only <dirs>` | Only run in specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Run in parallel |
-| `--concurrency <n>` | Max parallel processes |
+| `--exclude-only <dirs>` | Skip specified projects        |
+| `--parallel`            | Run in parallel                |
+| `--concurrency <n>`     | Max parallel processes         |
 
 ---
 
@@ -467,11 +469,11 @@ gogo npm link
 gogo npm link --all
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--all` | Link all projects bidirectionally (symlink dependencies) |
-| `--include-only <dirs>` | Only link specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
+| Option                  | Description                                              |
+| ----------------------- | -------------------------------------------------------- |
+| `--all`                 | Link all projects bidirectionally (symlink dependencies) |
+| `--include-only <dirs>` | Only link specified projects                             |
+| `--exclude-only <dirs>` | Skip specified projects                                  |
 
 ---
 
@@ -490,13 +492,13 @@ gogo npm run test --parallel
 gogo npm run lint --if-present
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--if-present` | Only run if the script exists in package.json |
-| `--include-only <dirs>` | Only run in specified projects |
-| `--exclude-only <dirs>` | Skip specified projects |
-| `--parallel` | Run in parallel |
-| `--concurrency <n>` | Max parallel processes |
+| Option                  | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `--if-present`          | Only run if the script exists in package.json |
+| `--include-only <dirs>` | Only run in specified projects                |
+| `--exclude-only <dirs>` | Skip specified projects                       |
+| `--parallel`            | Run in parallel                               |
+| `--concurrency <n>`     | Max parallel processes                        |
 
 ---
 
