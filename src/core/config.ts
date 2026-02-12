@@ -1,4 +1,4 @@
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, access } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { MetaConfigSchema, LoopRcSchema, type MetaConfig, type LoopRc, type CommandConfig } from '../types/index.js';
 
@@ -158,4 +158,22 @@ export function listCommands(metaConfig: MetaConfig): Array<{ name: string; comm
     name,
     command: normalizeCommand(config),
   }));
+}
+
+export async function addToGitignore(metaDir: string, entry: string): Promise<boolean> {
+  const gitignorePath = join(metaDir, '.gitignore');
+
+  if (await fileExists(gitignorePath)) {
+    const content = await readFile(gitignorePath, 'utf-8');
+    const lines = content.split('\n').map(line => line.trim());
+    if (lines.includes(entry)) {
+      return false;
+    }
+    const suffix = content.endsWith('\n') ? '' : '\n';
+    await appendFile(gitignorePath, `${suffix}${entry}\n`);
+  } else {
+    await writeFile(gitignorePath, `${entry}\n`, 'utf-8');
+  }
+
+  return true;
 }
