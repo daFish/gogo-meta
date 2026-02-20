@@ -3,19 +3,18 @@ import { loop, getExitCode } from '../../core/loop.js';
 import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 
-interface PushOptions {
+interface DiffOptions {
   includeOnly?: string;
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
   parallel?: boolean;
-  forceWithLease?: boolean;
-  force?: boolean;
-  tags?: boolean;
-  setUpstream?: string;
+  cached?: boolean;
+  stat?: boolean;
+  nameOnly?: boolean;
 }
 
-export async function pushCommand(options: PushOptions = {}): Promise<void> {
+export async function diffCommand(target: string | undefined, options: DiffOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -26,15 +25,15 @@ export async function pushCommand(options: PushOptions = {}): Promise<void> {
   const config = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const parts = ['git', 'push'];
-  if (options.forceWithLease) parts.push('--force-with-lease');
-  else if (options.force) parts.push('--force');
-  if (options.tags) parts.push('--tags');
-  if (options.setUpstream) parts.push('-u', 'origin', options.setUpstream);
+  const parts = ['git', 'diff'];
+  if (options.cached) parts.push('--cached');
+  if (options.stat) parts.push('--stat');
+  if (options.nameOnly) parts.push('--name-only');
+  if (target) parts.push(target);
 
   const command = parts.join(' ');
 
-  output.info('Pushing changes across repositories...');
+  output.info('Running git diff across repositories...');
 
   const results = await loop(command, { config, metaDir }, {
     ...filterOptions,

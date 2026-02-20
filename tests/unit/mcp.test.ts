@@ -85,9 +85,17 @@ describe('MCP Server', () => {
         'gogo_exec',
         'gogo_git_branch',
         'gogo_git_checkout',
+        'gogo_git_commit',
+        'gogo_git_diff',
+        'gogo_git_fetch',
+        'gogo_git_log',
+        'gogo_git_merge',
         'gogo_git_pull',
         'gogo_git_push',
+        'gogo_git_reset',
+        'gogo_git_stash',
         'gogo_git_status',
+        'gogo_git_tag',
         'gogo_project_add',
         'gogo_project_remove',
         'gogo_projects',
@@ -291,6 +299,161 @@ describe('MCP Server', () => {
         'git checkout -b new-branch',
         expect.objectContaining({ cwd: '/meta/api' }),
       );
+    });
+  });
+
+  describe('gogo_git_diff', () => {
+    it('runs git diff across repos', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({ name: 'gogo_git_diff', arguments: { cwd: '/meta' } });
+      expect(mockExecute).toHaveBeenCalledWith('git diff', expect.objectContaining({ cwd: '/meta/api' }));
+    });
+
+    it('supports cached, stat, nameOnly, and target', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_diff',
+        arguments: { cwd: '/meta', cached: true, stat: true, target: 'HEAD~1' },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git diff --cached --stat HEAD~1', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_log', () => {
+    it('runs git log with oneline and number', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_log',
+        arguments: { cwd: '/meta', oneline: true, number: 5 },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git log --oneline -5', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_fetch', () => {
+    it('runs git fetch with prune', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_fetch',
+        arguments: { cwd: '/meta', all: true, prune: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git fetch --all --prune', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_stash', () => {
+    it('stashes with message', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_stash',
+        arguments: { cwd: '/meta', message: 'WIP' },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git stash push -m "WIP"', expect.any(Object));
+    });
+
+    it('pops stash', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_stash',
+        arguments: { cwd: '/meta', action: 'pop' },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git stash pop', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_tag', () => {
+    it('creates an annotated tag', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_tag',
+        arguments: { cwd: '/meta', name: 'v1.0.0', message: 'Release' },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git tag -a "v1.0.0" -m "Release"', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_merge', () => {
+    it('merges a branch with --no-ff', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_merge',
+        arguments: { cwd: '/meta', branch: 'develop', noFf: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git merge --no-ff develop', expect.any(Object));
+    });
+
+    it('aborts merge', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_merge',
+        arguments: { cwd: '/meta', abort: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git merge --abort', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_reset', () => {
+    it('resets with --soft', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_reset',
+        arguments: { cwd: '/meta', target: 'HEAD~1', soft: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git reset --soft HEAD~1', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_commit (enhanced)', () => {
+    it('creates a fixup commit', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_commit',
+        arguments: { cwd: '/meta', fixup: 'abc123' },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git commit --fixup=abc123', expect.any(Object));
+    });
+
+    it('amends the previous commit', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_commit',
+        arguments: { cwd: '/meta', amend: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git commit --amend --no-edit', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_push (enhanced)', () => {
+    it('force pushes with lease', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_push',
+        arguments: { cwd: '/meta', forceWithLease: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git push --force-with-lease', expect.any(Object));
+    });
+
+    it('pushes tags', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_push',
+        arguments: { cwd: '/meta', tags: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git push --tags', expect.any(Object));
     });
   });
 

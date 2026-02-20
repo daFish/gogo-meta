@@ -191,18 +191,27 @@ export function createServer(): McpServer {
 
   server.tool(
     'gogo_git_push',
-    'Push local commits to remote for all (or filtered) child repositories.',
+    'Push local commits to remote for all (or filtered) child repositories. Supports --force-with-lease for safe force-pushing feature branches.',
     {
       cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
       includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
       excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
       parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
+      forceWithLease: z.boolean().optional().describe('Force push safely (reject if remote has new commits)'),
+      force: z.boolean().optional().describe('Force push (use with caution)'),
+      tags: z.boolean().optional().describe('Push all tags'),
+      setUpstream: z.string().optional().describe('Set upstream for the current branch'),
     },
-    async ({ cwd, ...filterParams }) => {
+    async ({ cwd, forceWithLease, force, tags, setUpstream, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
-        const results = await loop('git push', { config, metaDir }, options);
+        const parts = ['git', 'push'];
+        if (forceWithLease) parts.push('--force-with-lease');
+        else if (force) parts.push('--force');
+        if (tags) parts.push('--tags');
+        if (setUpstream) parts.push('-u', 'origin', setUpstream);
+        const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
         };
@@ -252,6 +261,291 @@ export function createServer(): McpServer {
         const options = buildLoopOptions(filterParams);
         const command = create ? `git checkout -b ${branch}` : `git checkout ${branch}`;
         const results = await loop(command, { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_diff',
+    'Show changes across all (or filtered) child repositories. Supports --cached, --stat, --name-only, and diff targets.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
+      cached: z.boolean().optional().describe('Show staged changes only'),
+      stat: z.boolean().optional().describe('Show diffstat summary'),
+      nameOnly: z.boolean().optional().describe('Show only changed file names'),
+      target: z.string().optional().describe('Diff target (e.g. branch name, commit SHA, HEAD~1..HEAD)'),
+    },
+    async ({ cwd, cached, stat, nameOnly, target, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        const parts = ['git', 'diff'];
+        if (cached) parts.push('--cached');
+        if (stat) parts.push('--stat');
+        if (nameOnly) parts.push('--name-only');
+        if (target) parts.push(target);
+        const results = await loop(parts.join(' '), { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_log',
+    'Show commit log across all (or filtered) child repositories. Supports --oneline, --since, -n, and custom format.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
+      number: z.number().optional().describe('Limit number of commits shown'),
+      oneline: z.boolean().optional().describe('Show compact one-line format'),
+      since: z.string().optional().describe('Show commits since date (e.g. "6 hours ago", "2024-01-01")'),
+      format: z.string().optional().describe('Pretty-print format string (e.g. "%h %s")'),
+    },
+    async ({ cwd, number, oneline, since, format, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        const parts = ['git', 'log'];
+        if (oneline) parts.push('--oneline');
+        if (number) parts.push(`-${number}`);
+        if (since) parts.push(`--since="${since}"`);
+        if (format) parts.push(`--format="${format}"`);
+        const results = await loop(parts.join(' '), { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_fetch',
+    'Fetch from remotes across all (or filtered) child repositories without merging.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
+      concurrency: z.number().optional().describe('Max concurrent operations (default: 4)'),
+      all: z.boolean().optional().describe('Fetch from all remotes'),
+      prune: z.boolean().optional().describe('Remove remote-tracking refs that no longer exist'),
+      tags: z.boolean().optional().describe('Fetch all tags'),
+    },
+    async ({ cwd, all, prune, tags, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        const parts = ['git', 'fetch'];
+        if (all) parts.push('--all');
+        if (prune) parts.push('--prune');
+        if (tags) parts.push('--tags');
+        const results = await loop(parts.join(' '), { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_stash',
+    'Stash or restore working directory changes across all (or filtered) child repositories.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      action: z.enum(['push', 'pop', 'list', 'drop', 'show']).optional().describe('Stash action (default: push)'),
+      message: z.string().optional().describe('Stash message (for push action)'),
+    },
+    async ({ cwd, action, message, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        options.parallel = false;
+        let command: string;
+        switch (action) {
+          case 'pop': command = 'git stash pop'; break;
+          case 'list': command = 'git stash list'; break;
+          case 'drop': command = 'git stash drop'; break;
+          case 'show': command = 'git stash show'; break;
+          default: {
+            if (message) {
+              const escaped = message.replace(/"/g, '\\"');
+              command = `git stash push -m "${escaped}"`;
+            } else {
+              command = 'git stash';
+            }
+            break;
+          }
+        }
+        const results = await loop(command, { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_tag',
+    'List, create, or delete tags across all (or filtered) child repositories.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
+      name: z.string().optional().describe('Tag name to create or delete (omit to list tags)'),
+      delete: z.boolean().optional().describe('Delete the tag'),
+      message: z.string().optional().describe('Tag message (creates annotated tag)'),
+    },
+    async ({ cwd, name, message, ...params }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(params);
+        let command: string;
+        if (name && params.delete) {
+          command = `git tag -d "${name}"`;
+        } else if (name) {
+          const parts = ['git', 'tag'];
+          if (message) {
+            const escaped = message.replace(/"/g, '\\"');
+            parts.push('-a', `"${name}"`, `-m "${escaped}"`);
+          } else {
+            parts.push(`"${name}"`);
+          }
+          command = parts.join(' ');
+        } else {
+          command = 'git tag';
+        }
+        const results = await loop(command, { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_merge',
+    'Merge a branch across all (or filtered) child repositories.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      branch: z.string().optional().describe('Branch to merge'),
+      noFf: z.boolean().optional().describe('Create a merge commit even for fast-forward'),
+      ffOnly: z.boolean().optional().describe('Only allow fast-forward merges'),
+      squash: z.boolean().optional().describe('Squash commits into a single commit'),
+      abort: z.boolean().optional().describe('Abort the current merge'),
+    },
+    async ({ cwd, branch, noFf, ffOnly, squash, abort, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        options.parallel = false;
+        let command: string;
+        if (abort) {
+          command = 'git merge --abort';
+        } else if (!branch) {
+          return errorResponse(new Error('Branch name is required for merge'));
+        } else {
+          const parts = ['git', 'merge'];
+          if (noFf) parts.push('--no-ff');
+          if (ffOnly) parts.push('--ff-only');
+          if (squash) parts.push('--squash');
+          parts.push(branch);
+          command = parts.join(' ');
+        }
+        const results = await loop(command, { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_reset',
+    'Reset HEAD across all (or filtered) child repositories.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      target: z.string().optional().describe('Reset target (e.g. HEAD~1, commit SHA)'),
+      soft: z.boolean().optional().describe('Keep changes staged'),
+      hard: z.boolean().optional().describe('Discard all changes'),
+    },
+    async ({ cwd, target, soft, hard, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        options.parallel = false;
+        const parts = ['git', 'reset'];
+        if (soft) parts.push('--soft');
+        else if (hard) parts.push('--hard');
+        if (target) parts.push(target);
+        const results = await loop(parts.join(' '), { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_commit',
+    'Commit changes across all (or filtered) child repositories. Supports --fixup for fixup commits and --amend.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      message: z.string().optional().describe('Commit message'),
+      fixup: z.string().optional().describe('Create a fixup commit for the given SHA'),
+      all: z.boolean().optional().describe('Stage all modified files before committing'),
+      amend: z.boolean().optional().describe('Amend the previous commit (no edit)'),
+    },
+    async ({ cwd, message, fixup, all, amend, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        options.parallel = false;
+        const parts = ['git', 'commit'];
+        if (all) parts.push('-a');
+        if (amend) {
+          parts.push('--amend', '--no-edit');
+        } else if (fixup) {
+          parts.push(`--fixup=${fixup}`);
+        } else if (message) {
+          const escaped = message.replace(/"/g, '\\"');
+          parts.push(`-m "${escaped}"`);
+        }
+        const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
         };

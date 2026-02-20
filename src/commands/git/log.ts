@@ -3,19 +3,19 @@ import { loop, getExitCode } from '../../core/loop.js';
 import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 
-interface PushOptions {
+interface LogOptions {
   includeOnly?: string;
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
   parallel?: boolean;
-  forceWithLease?: boolean;
-  force?: boolean;
-  tags?: boolean;
-  setUpstream?: string;
+  number?: number;
+  oneline?: boolean;
+  since?: string;
+  format?: string;
 }
 
-export async function pushCommand(options: PushOptions = {}): Promise<void> {
+export async function logCommand(options: LogOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -26,15 +26,15 @@ export async function pushCommand(options: PushOptions = {}): Promise<void> {
   const config = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const parts = ['git', 'push'];
-  if (options.forceWithLease) parts.push('--force-with-lease');
-  else if (options.force) parts.push('--force');
-  if (options.tags) parts.push('--tags');
-  if (options.setUpstream) parts.push('-u', 'origin', options.setUpstream);
+  const parts = ['git', 'log'];
+  if (options.oneline) parts.push('--oneline');
+  if (options.number) parts.push(`-${options.number}`);
+  if (options.since) parts.push(`--since="${options.since}"`);
+  if (options.format) parts.push(`--format="${options.format}"`);
 
   const command = parts.join(' ');
 
-  output.info('Pushing changes across repositories...');
+  output.info('Running git log across repositories...');
 
   const results = await loop(command, { config, metaDir }, {
     ...filterOptions,

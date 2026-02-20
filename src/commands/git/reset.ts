@@ -3,19 +3,17 @@ import { loop, getExitCode } from '../../core/loop.js';
 import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 
-interface PushOptions {
+interface ResetOptions {
   includeOnly?: string;
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
-  parallel?: boolean;
-  forceWithLease?: boolean;
-  force?: boolean;
-  tags?: boolean;
-  setUpstream?: string;
+  soft?: boolean;
+  hard?: boolean;
+  mixed?: boolean;
 }
 
-export async function pushCommand(options: PushOptions = {}): Promise<void> {
+export async function resetCommand(target: string | undefined, options: ResetOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -26,19 +24,19 @@ export async function pushCommand(options: PushOptions = {}): Promise<void> {
   const config = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const parts = ['git', 'push'];
-  if (options.forceWithLease) parts.push('--force-with-lease');
-  else if (options.force) parts.push('--force');
-  if (options.tags) parts.push('--tags');
-  if (options.setUpstream) parts.push('-u', 'origin', options.setUpstream);
+  const parts = ['git', 'reset'];
+  if (options.soft) parts.push('--soft');
+  else if (options.hard) parts.push('--hard');
+  else if (options.mixed) parts.push('--mixed');
+  if (target) parts.push(target);
 
   const command = parts.join(' ');
 
-  output.info('Pushing changes across repositories...');
+  output.info('Running git reset across repositories...');
 
   const results = await loop(command, { config, metaDir }, {
     ...filterOptions,
-    parallel: options.parallel,
+    parallel: false,
   });
 
   const exitCode = getExitCode(results);

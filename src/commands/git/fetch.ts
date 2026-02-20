@@ -3,19 +3,19 @@ import { loop, getExitCode } from '../../core/loop.js';
 import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 
-interface PushOptions {
+interface FetchOptions {
   includeOnly?: string;
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
   parallel?: boolean;
-  forceWithLease?: boolean;
-  force?: boolean;
+  concurrency?: number;
+  prune?: boolean;
+  all?: boolean;
   tags?: boolean;
-  setUpstream?: string;
 }
 
-export async function pushCommand(options: PushOptions = {}): Promise<void> {
+export async function fetchCommand(options: FetchOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -26,19 +26,19 @@ export async function pushCommand(options: PushOptions = {}): Promise<void> {
   const config = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const parts = ['git', 'push'];
-  if (options.forceWithLease) parts.push('--force-with-lease');
-  else if (options.force) parts.push('--force');
+  const parts = ['git', 'fetch'];
+  if (options.all) parts.push('--all');
+  if (options.prune) parts.push('--prune');
   if (options.tags) parts.push('--tags');
-  if (options.setUpstream) parts.push('-u', 'origin', options.setUpstream);
 
   const command = parts.join(' ');
 
-  output.info('Pushing changes across repositories...');
+  output.info('Fetching across repositories...');
 
   const results = await loop(command, { config, metaDir }, {
     ...filterOptions,
     parallel: options.parallel,
+    concurrency: options.concurrency,
   });
 
   const exitCode = getExitCode(results);
