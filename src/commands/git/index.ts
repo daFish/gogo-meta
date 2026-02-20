@@ -14,6 +14,9 @@ import { stashCommand } from './stash.js';
 import { tagCommand } from './tag.js';
 import { mergeCommand } from './merge.js';
 import { resetCommand } from './reset.js';
+import { rebaseCommand } from './rebase.js';
+import { cherryPickCommand } from './cherry-pick.js';
+import { cleanCommand } from './clean.js';
 
 interface GitCommandOptions {
   includeOnly?: string;
@@ -207,5 +210,46 @@ export function registerGitCommands(program: Command): void {
     .option('--exclude-only <dirs>', 'Exclude specified directories')
     .action(async (target: string | undefined, options: GitCommandOptions & { soft?: boolean; hard?: boolean; mixed?: boolean }) => {
       await resetCommand(target, options);
+    });
+
+  git
+    .command('rebase [target]')
+    .description('Rebase across all repositories')
+    .option('--autosquash', 'Automatically squash fixup commits (non-interactive)')
+    .option('-i, --interactive', 'Run non-interactive rebase with GIT_SEQUENCE_EDITOR=true')
+    .option('--onto <branch>', 'Rebase onto a different branch')
+    .option('--abort', 'Abort the current rebase')
+    .option('--continue', 'Continue after resolving conflicts')
+    .option('--skip', 'Skip the current patch')
+    .option('--include-only <dirs>', 'Only include specified directories')
+    .option('--exclude-only <dirs>', 'Exclude specified directories')
+    .action(async (target: string | undefined, options: GitCommandOptions & { autosquash?: boolean; interactive?: boolean; onto?: string; abort?: boolean; continue?: boolean; skip?: boolean }) => {
+      await rebaseCommand(target, options);
+    });
+
+  git
+    .command('cherry-pick [commits]')
+    .description('Cherry-pick commits across all repositories')
+    .option('--no-commit', 'Apply changes without creating commits')
+    .option('--abort', 'Abort the current cherry-pick')
+    .option('--continue', 'Continue after resolving conflicts')
+    .option('--include-only <dirs>', 'Only include specified directories')
+    .option('--exclude-only <dirs>', 'Exclude specified directories')
+    .action(async (commits: string | undefined, options: GitCommandOptions & { noCommit?: boolean; abort?: boolean; continue?: boolean }) => {
+      await cherryPickCommand(commits, options);
+    });
+
+  git
+    .command('clean')
+    .description('Clean untracked files across all repositories')
+    .option('-f, --force', 'Force clean (required by git)')
+    .option('-d, --directories', 'Also remove untracked directories')
+    .option('-n, --dry-run', 'Show what would be removed')
+    .option('-x, --ignored', 'Also remove ignored files')
+    .option('--include-only <dirs>', 'Only include specified directories')
+    .option('--exclude-only <dirs>', 'Exclude specified directories')
+    .option('--parallel', 'Run in parallel')
+    .action(async (options: GitCommandOptions & { force?: boolean; directories?: boolean; dryRun?: boolean; ignored?: boolean }) => {
+      await cleanCommand(options);
     });
 }

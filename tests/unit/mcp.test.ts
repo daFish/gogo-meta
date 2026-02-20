@@ -85,6 +85,8 @@ describe('MCP Server', () => {
         'gogo_exec',
         'gogo_git_branch',
         'gogo_git_checkout',
+        'gogo_git_cherry_pick',
+        'gogo_git_clean',
         'gogo_git_commit',
         'gogo_git_diff',
         'gogo_git_fetch',
@@ -92,6 +94,7 @@ describe('MCP Server', () => {
         'gogo_git_merge',
         'gogo_git_pull',
         'gogo_git_push',
+        'gogo_git_rebase',
         'gogo_git_reset',
         'gogo_git_stash',
         'gogo_git_status',
@@ -432,6 +435,64 @@ describe('MCP Server', () => {
         arguments: { cwd: '/meta', amend: true },
       });
       expect(mockExecute).toHaveBeenCalledWith('git commit --amend --no-edit', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_rebase', () => {
+    it('rebases with autosquash', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_rebase',
+        arguments: { cwd: '/meta', target: 'main', autosquash: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith(
+        'GIT_SEQUENCE_EDITOR=true git rebase --autosquash main',
+        expect.any(Object),
+      );
+    });
+
+    it('aborts rebase', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_rebase',
+        arguments: { cwd: '/meta', abort: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git rebase --abort', expect.any(Object));
+    });
+  });
+
+  describe('gogo_git_cherry_pick', () => {
+    it('cherry-picks a commit', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_cherry_pick',
+        arguments: { cwd: '/meta', commits: 'abc123' },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git cherry-pick abc123', expect.any(Object));
+    });
+
+    it('returns error without commits', async () => {
+      const { client } = await setupClientServer();
+      const result = await client.callTool({
+        name: 'gogo_git_cherry_pick',
+        arguments: { cwd: '/meta' },
+      });
+      expect(result.isError).toBe(true);
+    });
+  });
+
+  describe('gogo_git_clean', () => {
+    it('runs git clean with force and dry-run', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+      const { client } = await setupClientServer();
+      await client.callTool({
+        name: 'gogo_git_clean',
+        arguments: { cwd: '/meta', force: true, dryRun: true },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git clean -f -n', expect.any(Object));
     });
   });
 

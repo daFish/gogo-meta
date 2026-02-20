@@ -58,7 +58,7 @@ gogo exec "<command>" [--parallel] # Run command across repos
 gogo run [name]                    # Run predefined command from .gogo
 gogo git clone <url>               # Clone meta + children
 gogo git update                    # Clone missing repos
-gogo git status|diff|log|fetch|pull|push|branch|checkout|commit|merge|stash|tag|reset
+gogo git status|diff|log|fetch|pull|push|branch|checkout|commit|merge|rebase|stash|tag|reset|cherry-pick|clean
 gogo project create|import
 gogo npm install|ci|link|run
 ```
@@ -126,6 +126,9 @@ gogo-meta includes an MCP server (`src/mcp.ts`) that exposes all core functional
 | `git stash` (per repo) | `gogo_git_stash` (push/pop/list/drop/show) |
 | `git tag` (per repo) | `gogo_git_tag` (create/delete/list) |
 | `git reset` (per repo) | `gogo_git_reset` (supports `--soft`, `--hard`) |
+| `git rebase` (per repo) | `gogo_git_rebase` (supports `--autosquash`, `--abort`, `--continue`, `--onto`) |
+| `git cherry-pick` (per repo) | `gogo_git_cherry_pick` (supports `--no-commit`, `--abort`, `--continue`) |
+| `git clean` (per repo) | `gogo_git_clean` (supports `-f`, `-d`, `-n`, `-x`) |
 | Running a shell command in each repo | `gogo_exec` |
 | Reading `.gogo` config manually | `gogo_config` |
 | Listing child repositories | `gogo_projects` |

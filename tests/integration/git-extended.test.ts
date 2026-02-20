@@ -9,6 +9,9 @@ import { mergeCommand } from '../../src/commands/git/merge.js';
 import { resetCommand } from '../../src/commands/git/reset.js';
 import { pushCommand } from '../../src/commands/git/push.js';
 import { commitCommand } from '../../src/commands/git/commit.js';
+import { rebaseCommand } from '../../src/commands/git/rebase.js';
+import { cherryPickCommand } from '../../src/commands/git/cherry-pick.js';
+import { cleanCommand } from '../../src/commands/git/clean.js';
 
 vi.mock('node:fs/promises', async () => {
   const memfs = await import('memfs');
@@ -300,6 +303,97 @@ describe('extended git commands', () => {
     it('supports --amend', async () => {
       await commitCommand({ amend: true });
       expect(mockExecute).toHaveBeenCalledWith('git commit --amend --no-edit', expect.any(Object));
+    });
+  });
+
+  describe('rebase command', () => {
+    it('rebases onto a target', async () => {
+      await rebaseCommand('main');
+      expect(mockExecute).toHaveBeenCalledWith('git rebase main', expect.any(Object));
+    });
+
+    it('supports --autosquash (non-interactive)', async () => {
+      await rebaseCommand('main', { autosquash: true });
+      expect(mockExecute).toHaveBeenCalledWith(
+        'GIT_SEQUENCE_EDITOR=true git rebase --autosquash main',
+        expect.any(Object),
+      );
+    });
+
+    it('supports --onto', async () => {
+      await rebaseCommand('main', { onto: 'develop' });
+      expect(mockExecute).toHaveBeenCalledWith('git rebase --onto develop main', expect.any(Object));
+    });
+
+    it('supports --abort', async () => {
+      await rebaseCommand(undefined, { abort: true });
+      expect(mockExecute).toHaveBeenCalledWith('git rebase --abort', expect.any(Object));
+    });
+
+    it('supports --continue', async () => {
+      await rebaseCommand(undefined, { continue: true });
+      expect(mockExecute).toHaveBeenCalledWith('git rebase --continue', expect.any(Object));
+    });
+
+    it('supports --skip', async () => {
+      await rebaseCommand(undefined, { skip: true });
+      expect(mockExecute).toHaveBeenCalledWith('git rebase --skip', expect.any(Object));
+    });
+
+    it('supports autosquash with onto', async () => {
+      await rebaseCommand('HEAD~5', { autosquash: true, onto: 'main' });
+      expect(mockExecute).toHaveBeenCalledWith(
+        'GIT_SEQUENCE_EDITOR=true git rebase --autosquash --onto main HEAD~5',
+        expect.any(Object),
+      );
+    });
+  });
+
+  describe('cherry-pick command', () => {
+    it('cherry-picks a commit', async () => {
+      await cherryPickCommand('abc123');
+      expect(mockExecute).toHaveBeenCalledWith('git cherry-pick abc123', expect.any(Object));
+    });
+
+    it('supports --no-commit', async () => {
+      await cherryPickCommand('abc123', { noCommit: true });
+      expect(mockExecute).toHaveBeenCalledWith('git cherry-pick --no-commit abc123', expect.any(Object));
+    });
+
+    it('supports --abort', async () => {
+      await cherryPickCommand(undefined, { abort: true });
+      expect(mockExecute).toHaveBeenCalledWith('git cherry-pick --abort', expect.any(Object));
+    });
+
+    it('supports --continue', async () => {
+      await cherryPickCommand(undefined, { continue: true });
+      expect(mockExecute).toHaveBeenCalledWith('git cherry-pick --continue', expect.any(Object));
+    });
+
+    it('throws when no commits and not aborting/continuing', async () => {
+      await expect(cherryPickCommand(undefined)).rejects.toThrow('Commit SHA(s) required');
+    });
+  });
+
+  describe('clean command', () => {
+    it('runs git clean with force', async () => {
+      await cleanCommand({ force: true });
+      expect(mockExecute).toHaveBeenCalledWith('git clean -f', expect.any(Object));
+    });
+
+    it('supports -d (directories)', async () => {
+      await cleanCommand({ force: true, directories: true });
+      expect(mockExecute).toHaveBeenCalledWith('git clean -f -d', expect.any(Object));
+    });
+
+    it('supports dry run', async () => {
+      await cleanCommand({ dryRun: true });
+      expect(mockExecute).toHaveBeenCalledWith('git clean -n', expect.any(Object));
+    });
+
+    it('supports -x (ignored files)', async () => {
+      await cleanCommand({ force: true, ignored: true });
+      expect(mockExecute).toHaveBeenCalledWith('git clean -f -x', expect.any(Object));
     });
   });
 });
