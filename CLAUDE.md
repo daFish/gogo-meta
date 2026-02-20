@@ -102,3 +102,24 @@ gogo npm install|ci|link|run
   "ignore": ["docs", "examples"]
 }
 ```
+
+## MCP Server
+
+gogo-meta includes an MCP server (`src/mcp.ts`) that exposes all core functionality as structured tools for AI agents.
+
+### Using gogo MCP tools in projects
+
+**When a `.gogo` file is present, always prefer gogo MCP tools over manual bash git commands.** This applies to any repository managed by gogo-meta.
+
+| Instead of | Use MCP tool |
+|---|---|
+| `git status` (per repo) | `gogo_git_status` |
+| `git pull` (per repo) | `gogo_git_pull` |
+| `git push` (per repo) | `gogo_git_push` |
+| `git branch` (per repo) | `gogo_git_branch` |
+| `git checkout` (per repo) | `gogo_git_checkout` |
+| Running a shell command in each repo | `gogo_exec` |
+| Reading `.gogo` config manually | `gogo_config` |
+| Listing child repositories | `gogo_projects` |
+
+The MCP tools operate across **all** child repositories in a single call and return structured JSON with per-project results (exit code, stdout, stderr, duration). Use `includeOnly` / `excludeOnly` parameters to filter to specific repos.
