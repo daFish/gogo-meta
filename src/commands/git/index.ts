@@ -7,6 +7,7 @@ import { pushCommand } from './push.js';
 import { branchCommand } from './branch.js';
 import { checkoutCommand } from './checkout.js';
 import { commitCommand } from './commit.js';
+import { addCommand } from './add.js';
 import { diffCommand } from './diff.js';
 import { logCommand } from './log.js';
 import { fetchCommand } from './fetch.js';
@@ -161,6 +162,17 @@ export function registerGitCommands(program: Command): void {
     .option('--exclude-only <dirs>', 'Exclude specified directories')
     .action(async (options: GitCommandOptions & { message?: string; fixup?: string; all?: boolean; amend?: boolean }) => {
       await commitCommand(options);
+    });
+
+  git
+    .command('add [files]')
+    .description('Stage files for commit across all repositories')
+    .option('-A, --all', 'Stage all changes including untracked files')
+    .option('--include-only <dirs>', 'Only include specified directories')
+    .option('--exclude-only <dirs>', 'Exclude specified directories')
+    .option('--parallel', 'Run in parallel')
+    .action(async (files: string | undefined, options: GitCommandOptions & { all?: boolean }) => {
+      await addCommand(files, options);
     });
 
   git

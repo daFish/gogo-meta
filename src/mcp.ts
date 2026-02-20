@@ -16,8 +16,9 @@ import {
   writeMetaConfig,
   fileExists,
 } from './core/config.js';
+import { execute } from './core/executor.js';
 import { loop } from './core/loop.js';
-import type { LoopOptions, LoopResult } from './types/index.js';
+import type { ExecutorResult, LoopOptions, LoopResult } from './types/index.js';
 
 async function resolveContext(cwd?: string) {
   const workDir = cwd ?? process.cwd();
@@ -57,6 +58,21 @@ function formatLoopResults(results: LoopResult[]): string {
       stderr: r.result.stderr,
       duration: r.duration,
     })),
+    null,
+    2,
+  );
+}
+
+function formatRootResult(metaDir: string, result: ExecutorResult, duration: number): string {
+  return JSON.stringify(
+    [{
+      project: '.',
+      success: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      duration,
+    }],
     null,
     2,
   );
@@ -129,9 +145,18 @@ export function createServer(): McpServer {
       excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
       parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
       concurrency: z.number().optional().describe('Max concurrent executions when parallel (default: 4)'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ command, cwd, ...filterParams }) => {
+    async ({ command, cwd, root, ...filterParams }) => {
       try {
+        if (root) {
+          const { metaDir } = await resolveContext(cwd);
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
         const results = await loop(command, { config, metaDir }, options);
@@ -151,9 +176,18 @@ export function createServer(): McpServer {
       cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
       includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
       excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, ...filterParams }) => {
+    async ({ cwd, root, ...filterParams }) => {
       try {
+        if (root) {
+          const { metaDir } = await resolveContext(cwd);
+          const start = Date.now();
+          const result = await execute('git status', { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
         const results = await loop('git status', { config, metaDir }, options);
@@ -174,9 +208,18 @@ export function createServer(): McpServer {
       includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
       excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
       parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, ...filterParams }) => {
+    async ({ cwd, root, ...filterParams }) => {
       try {
+        if (root) {
+          const { metaDir } = await resolveContext(cwd);
+          const start = Date.now();
+          const result = await execute('git pull', { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
         const results = await loop('git pull', { config, metaDir }, options);
@@ -201,8 +244,9 @@ export function createServer(): McpServer {
       force: z.boolean().optional().describe('Force push (use with caution)'),
       tags: z.boolean().optional().describe('Push all tags'),
       setUpstream: z.string().optional().describe('Set upstream for the current branch'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, forceWithLease, force, tags, setUpstream, ...filterParams }) => {
+    async ({ cwd, forceWithLease, force, tags, setUpstream, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -211,6 +255,13 @@ export function createServer(): McpServer {
         else if (force) parts.push('--force');
         if (tags) parts.push('--tags');
         if (setUpstream) parts.push('-u', 'origin', setUpstream);
+        if (root) {
+          const start = Date.now();
+          const result = await execute(parts.join(' '), { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -229,12 +280,20 @@ export function createServer(): McpServer {
       cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
       includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
       excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ name, cwd, ...filterParams }) => {
+    async ({ name, cwd, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
         const command = name ? `git branch ${name}` : 'git branch';
+        if (root) {
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(command, { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -254,12 +313,20 @@ export function createServer(): McpServer {
       cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
       includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
       excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ branch, create, cwd, ...filterParams }) => {
+    async ({ branch, create, cwd, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
         const command = create ? `git checkout -b ${branch}` : `git checkout ${branch}`;
+        if (root) {
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(command, { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -282,8 +349,9 @@ export function createServer(): McpServer {
       stat: z.boolean().optional().describe('Show diffstat summary'),
       nameOnly: z.boolean().optional().describe('Show only changed file names'),
       target: z.string().optional().describe('Diff target (e.g. branch name, commit SHA, HEAD~1..HEAD)'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, cached, stat, nameOnly, target, ...filterParams }) => {
+    async ({ cwd, cached, stat, nameOnly, target, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -292,6 +360,13 @@ export function createServer(): McpServer {
         if (stat) parts.push('--stat');
         if (nameOnly) parts.push('--name-only');
         if (target) parts.push(target);
+        if (root) {
+          const start = Date.now();
+          const result = await execute(parts.join(' '), { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -314,8 +389,9 @@ export function createServer(): McpServer {
       oneline: z.boolean().optional().describe('Show compact one-line format'),
       since: z.string().optional().describe('Show commits since date (e.g. "6 hours ago", "2024-01-01")'),
       format: z.string().optional().describe('Pretty-print format string (e.g. "%h %s")'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, number, oneline, since, format, ...filterParams }) => {
+    async ({ cwd, number, oneline, since, format, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -324,6 +400,13 @@ export function createServer(): McpServer {
         if (number) parts.push(`-${number}`);
         if (since) parts.push(`--since="${since}"`);
         if (format) parts.push(`--format="${format}"`);
+        if (root) {
+          const start = Date.now();
+          const result = await execute(parts.join(' '), { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -346,8 +429,9 @@ export function createServer(): McpServer {
       all: z.boolean().optional().describe('Fetch from all remotes'),
       prune: z.boolean().optional().describe('Remove remote-tracking refs that no longer exist'),
       tags: z.boolean().optional().describe('Fetch all tags'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, all, prune, tags, ...filterParams }) => {
+    async ({ cwd, all, prune, tags, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -355,6 +439,13 @@ export function createServer(): McpServer {
         if (all) parts.push('--all');
         if (prune) parts.push('--prune');
         if (tags) parts.push('--tags');
+        if (root) {
+          const start = Date.now();
+          const result = await execute(parts.join(' '), { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -374,8 +465,9 @@ export function createServer(): McpServer {
       excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
       action: z.enum(['push', 'pop', 'list', 'drop', 'show']).optional().describe('Stash action (default: push)'),
       message: z.string().optional().describe('Stash message (for push action)'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, action, message, ...filterParams }) => {
+    async ({ cwd, action, message, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -395,6 +487,13 @@ export function createServer(): McpServer {
             }
             break;
           }
+        }
+        if (root) {
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
         }
         const results = await loop(command, { config, metaDir }, options);
         return {
@@ -417,8 +516,9 @@ export function createServer(): McpServer {
       name: z.string().optional().describe('Tag name to create or delete (omit to list tags)'),
       delete: z.boolean().optional().describe('Delete the tag'),
       message: z.string().optional().describe('Tag message (creates annotated tag)'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, name, message, ...params }) => {
+    async ({ cwd, name, message, root, ...params }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(params);
@@ -436,6 +536,13 @@ export function createServer(): McpServer {
           command = parts.join(' ');
         } else {
           command = 'git tag';
+        }
+        if (root) {
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
         }
         const results = await loop(command, { config, metaDir }, options);
         return {
@@ -459,8 +566,9 @@ export function createServer(): McpServer {
       ffOnly: z.boolean().optional().describe('Only allow fast-forward merges'),
       squash: z.boolean().optional().describe('Squash commits into a single commit'),
       abort: z.boolean().optional().describe('Abort the current merge'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, branch, noFf, ffOnly, squash, abort, ...filterParams }) => {
+    async ({ cwd, branch, noFf, ffOnly, squash, abort, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -477,6 +585,13 @@ export function createServer(): McpServer {
           if (squash) parts.push('--squash');
           parts.push(branch);
           command = parts.join(' ');
+        }
+        if (root) {
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
         }
         const results = await loop(command, { config, metaDir }, options);
         return {
@@ -498,8 +613,9 @@ export function createServer(): McpServer {
       target: z.string().optional().describe('Reset target (e.g. HEAD~1, commit SHA)'),
       soft: z.boolean().optional().describe('Keep changes staged'),
       hard: z.boolean().optional().describe('Discard all changes'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, target, soft, hard, ...filterParams }) => {
+    async ({ cwd, target, soft, hard, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -508,6 +624,13 @@ export function createServer(): McpServer {
         if (soft) parts.push('--soft');
         else if (hard) parts.push('--hard');
         if (target) parts.push(target);
+        if (root) {
+          const start = Date.now();
+          const result = await execute(parts.join(' '), { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -529,8 +652,9 @@ export function createServer(): McpServer {
       fixup: z.string().optional().describe('Create a fixup commit for the given SHA'),
       all: z.boolean().optional().describe('Stage all modified files before committing'),
       amend: z.boolean().optional().describe('Amend the previous commit (no edit)'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, message, fixup, all, amend, ...filterParams }) => {
+    async ({ cwd, message, fixup, all, amend, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -545,7 +669,54 @@ export function createServer(): McpServer {
           const escaped = message.replace(/"/g, '\\"');
           parts.push(`-m "${escaped}"`);
         }
+        if (root) {
+          const start = Date.now();
+          const result = await execute(parts.join(' '), { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(parts.join(' '), { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_add',
+    'Stage files for commit across all (or filtered) child repositories. Supports staging specific files or all changes.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      files: z.string().optional().describe('Space-separated file paths to stage (default: ".")'),
+      all: z.boolean().optional().describe('Stage all changes including untracked files (-A)'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
+    },
+    async ({ cwd, files, all, root, ...filterParams }) => {
+      try {
+        const parts = ['git', 'add'];
+        if (all) parts.push('-A');
+        else parts.push(files || '.');
+        const command = parts.join(' ');
+
+        if (root) {
+          const { metaDir } = await resolveContext(cwd);
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
+
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        options.parallel = false;
+        const results = await loop(command, { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
         };
@@ -568,8 +739,9 @@ export function createServer(): McpServer {
       abort: z.boolean().optional().describe('Abort the current rebase'),
       continue: z.boolean().optional().describe('Continue after resolving conflicts'),
       skip: z.boolean().optional().describe('Skip the current patch'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, target, autosquash, onto, abort, skip, ...params }) => {
+    async ({ cwd, target, autosquash, onto, abort, skip, root, ...params }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(params);
@@ -592,6 +764,13 @@ export function createServer(): McpServer {
           if (target) parts.push(target);
           command = parts.join(' ');
         }
+        if (root) {
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(command, { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
@@ -613,8 +792,9 @@ export function createServer(): McpServer {
       noCommit: z.boolean().optional().describe('Apply changes without creating commits'),
       abort: z.boolean().optional().describe('Abort the current cherry-pick'),
       continue: z.boolean().optional().describe('Continue after resolving conflicts'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, commits, noCommit, abort, ...params }) => {
+    async ({ cwd, commits, noCommit, abort, root, ...params }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(params);
@@ -631,6 +811,13 @@ export function createServer(): McpServer {
           if (noCommit) parts.push('--no-commit');
           parts.push(commits);
           command = parts.join(' ');
+        }
+        if (root) {
+          const start = Date.now();
+          const result = await execute(command, { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
         }
         const results = await loop(command, { config, metaDir }, options);
         return {
@@ -654,8 +841,9 @@ export function createServer(): McpServer {
       directories: z.boolean().optional().describe('Also remove untracked directories'),
       dryRun: z.boolean().optional().describe('Show what would be removed without deleting'),
       ignored: z.boolean().optional().describe('Also remove ignored files'),
+      root: z.boolean().optional().describe('When true, run in the meta root directory instead of child repos'),
     },
-    async ({ cwd, force, directories, dryRun, ignored, ...filterParams }) => {
+    async ({ cwd, force, directories, dryRun, ignored, root, ...filterParams }) => {
       try {
         const { config, metaDir } = await resolveContext(cwd);
         const options = buildLoopOptions(filterParams);
@@ -664,6 +852,13 @@ export function createServer(): McpServer {
         if (directories) parts.push('-d');
         if (dryRun) parts.push('-n');
         if (ignored) parts.push('-x');
+        if (root) {
+          const start = Date.now();
+          const result = await execute(parts.join(' '), { cwd: metaDir });
+          return {
+            content: [{ type: 'text' as const, text: formatRootResult(metaDir, result, Date.now() - start) }],
+          };
+        }
         const results = await loop(parts.join(' '), { config, metaDir }, options);
         return {
           content: [{ type: 'text' as const, text: formatLoopResults(results) }],
