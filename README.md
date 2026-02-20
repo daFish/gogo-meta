@@ -375,6 +375,25 @@ gogo git commit -m "Fix bug" --include-only api
 
 ---
 
+### `gogo git add [files]`
+
+Stage files for commit across all repositories.
+
+```bash
+gogo git add
+gogo git add -A
+gogo git add "src/main.ts"
+```
+
+| Option | Description |
+|--------|-------------|
+| `-A, --all` | Stage all changes including untracked |
+| `--include-only <dirs>` | Only stage in specified projects |
+| `--exclude-only <dirs>` | Skip specified projects |
+| `--parallel` | Run in parallel |
+
+---
+
 ### `gogo project create <folder> <url>`
 
 Create and initialize a new child repository.
@@ -548,6 +567,77 @@ gogo npm run build --exclude-only docs
 
 # Target all libs
 gogo git status --include-pattern "^libs/"
+```
+
+## MCP Server
+
+gogo-meta includes a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes all functionality as structured tools for AI agents like Claude Code.
+
+### Setup
+
+Register the MCP server with Claude Code:
+
+```bash
+claude mcp add --transport stdio gogo-meta -- node /path/to/gogo-meta/dist/mcp.js
+```
+
+Or add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "gogo-meta": {
+      "command": "node",
+      "args": ["/path/to/gogo-meta/dist/mcp.js"]
+    }
+  }
+}
+```
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `gogo_config` | Read the `.gogo` configuration |
+| `gogo_projects` | List all child repositories with paths and status |
+| `gogo_exec` | Run a shell command across repos |
+| `gogo_run` | Run a predefined command from `.gogo` |
+| `gogo_commands` | List predefined commands |
+| `gogo_git_status` | Git status across repos |
+| `gogo_git_diff` | Show changes (`--cached`, `--stat`, `--name-only`) |
+| `gogo_git_log` | Commit log (`--oneline`, `-n`, `--since`, `--format`) |
+| `gogo_git_fetch` | Fetch from remotes (`--all`, `--prune`, `--tags`) |
+| `gogo_git_pull` | Pull latest changes |
+| `gogo_git_push` | Push commits (`--force-with-lease`, `--tags`, `-u`) |
+| `gogo_git_branch` | List or create branches |
+| `gogo_git_checkout` | Checkout branches (`-b` to create) |
+| `gogo_git_commit` | Commit changes (`--fixup`, `--amend`, `-a`) |
+| `gogo_git_add` | Stage files for commit | `files`, `all`, `root` |
+| `gogo_git_merge` | Merge branches (`--no-ff`, `--squash`, `--abort`) |
+| `gogo_git_rebase` | Rebase (`--autosquash`, `--abort`, `--continue`, `--onto`) |
+| `gogo_git_stash` | Stash changes (push/pop/list/drop/show) |
+| `gogo_git_tag` | Manage tags (create/delete/list) |
+| `gogo_git_reset` | Reset HEAD (`--soft`, `--hard`) |
+| `gogo_git_cherry_pick` | Cherry-pick commits (`--no-commit`, `--abort`) |
+| `gogo_git_clean` | Clean untracked files (`-f`, `-d`, `-n`, `-x`) |
+| `gogo_project_add` | Add a project to `.gogo` |
+| `gogo_project_remove` | Remove a project from `.gogo` |
+
+All git tools support `includeOnly` and `excludeOnly` parameters to target specific repositories. Results are returned as structured JSON with per-project exit code, stdout, stderr, and duration.
+
+All git tools support a `root` boolean parameter to run the command in the meta root directory instead of child repos. Use this for operations on the meta repository itself.
+
+### Example
+
+```
+> Use gogo to check status of frontend and cms
+
+gogo_git_status(includeOnly="frontend,cms")
+
+[
+  { "project": "frontend", "success": true, "stdout": "On branch develop\nnothing to commit" },
+  { "project": "cms", "success": true, "stdout": "On branch main\nChanges not staged..." }
+]
 ```
 
 ## Requirements

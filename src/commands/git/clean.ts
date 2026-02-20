@@ -3,19 +3,19 @@ import { loop, getExitCode } from '../../core/loop.js';
 import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 
-interface PushOptions {
+interface CleanOptions {
   includeOnly?: string;
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
   parallel?: boolean;
-  forceWithLease?: boolean;
   force?: boolean;
-  tags?: boolean;
-  setUpstream?: string;
+  directories?: boolean;
+  dryRun?: boolean;
+  ignored?: boolean;
 }
 
-export async function pushCommand(options: PushOptions = {}): Promise<void> {
+export async function cleanCommand(options: CleanOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -26,15 +26,15 @@ export async function pushCommand(options: PushOptions = {}): Promise<void> {
   const config = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const parts = ['git', 'push'];
-  if (options.forceWithLease) parts.push('--force-with-lease');
-  else if (options.force) parts.push('--force');
-  if (options.tags) parts.push('--tags');
-  if (options.setUpstream) parts.push('-u', 'origin', options.setUpstream);
+  const parts = ['git', 'clean'];
+  if (options.force) parts.push('-f');
+  if (options.directories) parts.push('-d');
+  if (options.dryRun) parts.push('-n');
+  if (options.ignored) parts.push('-x');
 
   const command = parts.join(' ');
 
-  output.info('Pushing changes across repositories...');
+  output.info('Cleaning working directories across repositories...');
 
   const results = await loop(command, { config, metaDir }, {
     ...filterOptions,

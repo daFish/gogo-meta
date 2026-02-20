@@ -3,19 +3,16 @@ import { loop, getExitCode } from '../../core/loop.js';
 import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 
-interface PushOptions {
+interface AddOptions {
   includeOnly?: string;
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
   parallel?: boolean;
-  forceWithLease?: boolean;
-  force?: boolean;
-  tags?: boolean;
-  setUpstream?: string;
+  all?: boolean;
 }
 
-export async function pushCommand(options: PushOptions = {}): Promise<void> {
+export async function addCommand(files: string | undefined, options: AddOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -26,17 +23,13 @@ export async function pushCommand(options: PushOptions = {}): Promise<void> {
   const config = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const parts = ['git', 'push'];
-  if (options.forceWithLease) parts.push('--force-with-lease');
-  else if (options.force) parts.push('--force');
-  if (options.tags) parts.push('--tags');
-  if (options.setUpstream) parts.push('-u', 'origin', options.setUpstream);
+  const parts = ['git', 'add'];
+  if (options.all) parts.push('-A');
+  else parts.push(files || '.');
 
-  const command = parts.join(' ');
+  output.info('Staging files across repositories...');
 
-  output.info('Pushing changes across repositories...');
-
-  const results = await loop(command, { config, metaDir }, {
+  const results = await loop(parts.join(' '), { config, metaDir }, {
     ...filterOptions,
     parallel: options.parallel,
   });
