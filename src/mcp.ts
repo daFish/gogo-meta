@@ -556,6 +556,125 @@ export function createServer(): McpServer {
   );
 
   server.tool(
+    'gogo_git_rebase',
+    'Rebase across all (or filtered) child repositories. Supports --autosquash for fixup workflow (runs non-interactively with GIT_SEQUENCE_EDITOR=true).',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      target: z.string().optional().describe('Rebase target (e.g. branch name, commit SHA)'),
+      autosquash: z.boolean().optional().describe('Automatically squash fixup commits (non-interactive)'),
+      onto: z.string().optional().describe('Rebase onto a different branch'),
+      abort: z.boolean().optional().describe('Abort the current rebase'),
+      continue: z.boolean().optional().describe('Continue after resolving conflicts'),
+      skip: z.boolean().optional().describe('Skip the current patch'),
+    },
+    async ({ cwd, target, autosquash, onto, abort, skip, ...params }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(params);
+        options.parallel = false;
+        let command: string;
+        if (abort) {
+          command = 'git rebase --abort';
+        } else if (params.continue) {
+          command = 'git rebase --continue';
+        } else if (skip) {
+          command = 'git rebase --skip';
+        } else {
+          const parts: string[] = [];
+          if (autosquash) {
+            parts.push('GIT_SEQUENCE_EDITOR=true git rebase --autosquash');
+          } else {
+            parts.push('git rebase');
+          }
+          if (onto) parts.push(`--onto ${onto}`);
+          if (target) parts.push(target);
+          command = parts.join(' ');
+        }
+        const results = await loop(command, { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_cherry_pick',
+    'Cherry-pick commits across all (or filtered) child repositories.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      commits: z.string().optional().describe('Commit SHA(s) to cherry-pick'),
+      noCommit: z.boolean().optional().describe('Apply changes without creating commits'),
+      abort: z.boolean().optional().describe('Abort the current cherry-pick'),
+      continue: z.boolean().optional().describe('Continue after resolving conflicts'),
+    },
+    async ({ cwd, commits, noCommit, abort, ...params }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(params);
+        options.parallel = false;
+        let command: string;
+        if (abort) {
+          command = 'git cherry-pick --abort';
+        } else if (params.continue) {
+          command = 'git cherry-pick --continue';
+        } else if (!commits) {
+          return errorResponse(new Error('Commit SHA(s) required for cherry-pick'));
+        } else {
+          const parts = ['git', 'cherry-pick'];
+          if (noCommit) parts.push('--no-commit');
+          parts.push(commits);
+          command = parts.join(' ');
+        }
+        const results = await loop(command, { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
+    'gogo_git_clean',
+    'Clean untracked files across all (or filtered) child repositories.',
+    {
+      cwd: z.string().optional().describe('Working directory (defaults to process.cwd())'),
+      includeOnly: z.string().optional().describe('Comma-separated list of project names to include'),
+      excludeOnly: z.string().optional().describe('Comma-separated list of project names to exclude'),
+      parallel: z.boolean().optional().describe('Run in parallel (default: false)'),
+      force: z.boolean().optional().describe('Force clean (required by git)'),
+      directories: z.boolean().optional().describe('Also remove untracked directories'),
+      dryRun: z.boolean().optional().describe('Show what would be removed without deleting'),
+      ignored: z.boolean().optional().describe('Also remove ignored files'),
+    },
+    async ({ cwd, force, directories, dryRun, ignored, ...filterParams }) => {
+      try {
+        const { config, metaDir } = await resolveContext(cwd);
+        const options = buildLoopOptions(filterParams);
+        const parts = ['git', 'clean'];
+        if (force) parts.push('-f');
+        if (directories) parts.push('-d');
+        if (dryRun) parts.push('-n');
+        if (ignored) parts.push('-x');
+        const results = await loop(parts.join(' '), { config, metaDir }, options);
+        return {
+          content: [{ type: 'text' as const, text: formatLoopResults(results) }],
+        };
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+  );
+
+  server.tool(
     'gogo_commands',
     'List all predefined commands from the .gogo configuration file.',
     {
