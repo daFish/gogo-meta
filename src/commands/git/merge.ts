@@ -3,18 +3,18 @@ import { loop, getExitCode } from '../../core/loop.js';
 import { createFilterOptions } from '../../core/filter.js';
 import * as output from '../../core/output.js';
 
-interface CommitOptions {
+interface MergeOptions {
   includeOnly?: string;
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
-  message?: string;
-  fixup?: string;
-  all?: boolean;
-  amend?: boolean;
+  noFf?: boolean;
+  ffOnly?: boolean;
+  abort?: boolean;
+  squash?: boolean;
 }
 
-export async function commitCommand(options: CommitOptions): Promise<void> {
+export async function mergeCommand(branch: string | undefined, options: MergeOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const metaDir = await getMetaDir(cwd);
 
@@ -25,20 +25,25 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
   const config = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const parts = ['git', 'commit'];
-  if (options.all) parts.push('-a');
-  if (options.amend) {
-    parts.push('--amend', '--no-edit');
-  } else if (options.fixup) {
-    parts.push(`--fixup=${options.fixup}`);
-  } else if (options.message) {
-    const escaped = options.message.replace(/"/g, '\\"');
-    parts.push(`-m "${escaped}"`);
+  let command: string;
+  let actionMessage: string;
+
+  if (options.abort) {
+    command = 'git merge --abort';
+    actionMessage = 'Aborting merge across repositories...';
+  } else if (!branch) {
+    throw new Error('Branch name is required for merge');
+  } else {
+    const parts = ['git', 'merge'];
+    if (options.noFf) parts.push('--no-ff');
+    if (options.ffOnly) parts.push('--ff-only');
+    if (options.squash) parts.push('--squash');
+    parts.push(branch);
+    command = parts.join(' ');
+    actionMessage = `Merging "${branch}" across repositories...`;
   }
 
-  const command = parts.join(' ');
-
-  output.info('Committing changes across repositories...');
+  output.info(actionMessage);
 
   const results = await loop(command, { config, metaDir }, {
     ...filterOptions,
