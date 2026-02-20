@@ -375,6 +375,25 @@ gogo git commit -m "Fix bug" --include-only api
 
 ---
 
+### `gogo git add [files]`
+
+Stage files for commit across all repositories.
+
+```bash
+gogo git add
+gogo git add -A
+gogo git add "src/main.ts"
+```
+
+| Option | Description |
+|--------|-------------|
+| `-A, --all` | Stage all changes including untracked |
+| `--include-only <dirs>` | Only stage in specified projects |
+| `--exclude-only <dirs>` | Skip specified projects |
+| `--parallel` | Run in parallel |
+
+---
+
 ### `gogo project create <folder> <url>`
 
 Create and initialize a new child repository.
@@ -593,6 +612,7 @@ Or add to your project's `.mcp.json`:
 | `gogo_git_branch` | List or create branches |
 | `gogo_git_checkout` | Checkout branches (`-b` to create) |
 | `gogo_git_commit` | Commit changes (`--fixup`, `--amend`, `-a`) |
+| `gogo_git_add` | Stage files for commit | `files`, `all`, `root` |
 | `gogo_git_merge` | Merge branches (`--no-ff`, `--squash`, `--abort`) |
 | `gogo_git_rebase` | Rebase (`--autosquash`, `--abort`, `--continue`, `--onto`) |
 | `gogo_git_stash` | Stash changes (push/pop/list/drop/show) |
@@ -604,6 +624,8 @@ Or add to your project's `.mcp.json`:
 | `gogo_project_remove` | Remove a project from `.gogo` |
 
 All git tools support `includeOnly` and `excludeOnly` parameters to target specific repositories. Results are returned as structured JSON with per-project exit code, stdout, stderr, and duration.
+
+All git tools support a `root` boolean parameter to run the command in the meta root directory instead of child repos. Use this for operations on the meta repository itself.
 
 ### Example
 

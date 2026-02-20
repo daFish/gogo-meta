@@ -83,6 +83,7 @@ describe('MCP Server', () => {
         'gogo_commands',
         'gogo_config',
         'gogo_exec',
+        'gogo_git_add',
         'gogo_git_branch',
         'gogo_git_checkout',
         'gogo_git_cherry_pick',
@@ -595,6 +596,88 @@ describe('MCP Server', () => {
 
       expect(result.isError).toBe(true);
       expect((result.content as Array<{ text: string }>)[0].text).toContain('not found');
+    });
+  });
+
+  describe('root parameter', () => {
+    it('should execute in meta root directory when root is true', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: 'On branch main', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      const result = await client.callTool({ name: 'gogo_git_status', arguments: { root: true, cwd: '/meta' } });
+      expect(mockExecute).toHaveBeenCalledWith('git status', expect.objectContaining({ cwd: '/meta' }));
+      expect(mockExecute).toHaveBeenCalledTimes(1); // only once, not per child repo
+      const parsed = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].project).toBe('.');
+      expect(parsed[0].success).toBe(true);
+    });
+
+    it('should build and execute command in root for tools with params', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      const result = await client.callTool({
+        name: 'gogo_git_push',
+        arguments: { root: true, forceWithLease: true, cwd: '/meta' },
+      });
+      expect(mockExecute).toHaveBeenCalledWith('git push --force-with-lease', expect.objectContaining({ cwd: '/meta' }));
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      const parsed = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+      expect(parsed[0].project).toBe('.');
+    });
+
+    it('should loop over child repos when root is false or omitted', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      await client.callTool({ name: 'gogo_git_status', arguments: { cwd: '/meta' } });
+      expect(mockExecute).toHaveBeenCalledTimes(2); // api + web
+      expect(mockExecute).toHaveBeenCalledWith('git status', expect.objectContaining({ cwd: '/meta/api' }));
+      expect(mockExecute).toHaveBeenCalledWith('git status', expect.objectContaining({ cwd: '/meta/web' }));
+    });
+  });
+
+  describe('gogo_git_add', () => {
+    it('should stage all files with -A flag', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      await client.callTool({ name: 'gogo_git_add', arguments: { all: true, cwd: '/meta' } });
+      expect(mockExecute).toHaveBeenCalledWith('git add -A', expect.objectContaining({ cwd: '/meta/api' }));
+      expect(mockExecute).toHaveBeenCalledWith('git add -A', expect.objectContaining({ cwd: '/meta/web' }));
+    });
+
+    it('should stage specific files', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      await client.callTool({ name: 'gogo_git_add', arguments: { files: 'src/main.ts', cwd: '/meta' } });
+      expect(mockExecute).toHaveBeenCalledWith('git add src/main.ts', expect.any(Object));
+    });
+
+    it('should default to staging all in current dir', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      await client.callTool({ name: 'gogo_git_add', arguments: { cwd: '/meta' } });
+      expect(mockExecute).toHaveBeenCalledWith('git add .', expect.any(Object));
+    });
+
+    it('should support root parameter', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      const result = await client.callTool({ name: 'gogo_git_add', arguments: { root: true, all: true, cwd: '/meta' } });
+      expect(mockExecute).toHaveBeenCalledWith('git add -A', expect.objectContaining({ cwd: '/meta' }));
+      expect(mockExecute).toHaveBeenCalledTimes(1);
+      const parsed = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+      expect(parsed[0].project).toBe('.');
+    });
+
+    it('should support includeOnly filter', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '', timedOut: false });
+      const { client } = await setupClientServer();
+      const result = await client.callTool({
+        name: 'gogo_git_add',
+        arguments: { includeOnly: 'api', cwd: '/meta' },
+      });
+      const parsed = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].project).toBe('api');
     });
   });
 });
