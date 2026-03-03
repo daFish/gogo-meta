@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export type ConfigFormat = 'json' | 'yaml';
+
 export const CommandConfigObjectSchema = z.object({
   cmd: z.string(),
   description: z.string().optional(),
