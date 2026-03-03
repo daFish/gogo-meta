@@ -1,15 +1,40 @@
 import { readFile, writeFile, appendFile, access } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { MetaConfigSchema, LoopRcSchema, type MetaConfig, type LoopRc, type CommandConfig } from '../types/index.js';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { MetaConfigSchema, LoopRcSchema, type MetaConfig, type LoopRc, type CommandConfig, type ConfigFormat } from '../types/index.js';
+
+export type { ConfigFormat };
 
 export const META_FILE = '.gogo';
 export const LOOPRC_FILE = '.looprc';
+export const META_FILE_CANDIDATES = ['.gogo', '.gogo.yaml', '.gogo.yml'] as const;
 
 export class ConfigError extends Error {
   constructor(message: string, public readonly path?: string) {
     super(message);
     this.name = 'ConfigError';
   }
+}
+
+export function detectFormat(filePath: string): ConfigFormat {
+  if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    return 'yaml';
+  }
+  return 'json';
+}
+
+export function filenameForFormat(format: ConfigFormat): string {
+  return format === 'yaml' ? '.gogo.yaml' : '.gogo';
+}
+
+function parseContent(content: string, format: ConfigFormat): unknown {
+  return format === 'yaml' ? parseYaml(content) : JSON.parse(content);
+}
+
+function serializeContent(data: unknown, format: ConfigFormat): string {
+  return format === 'yaml'
+    ? stringifyYaml(data, { indent: 2 })
+    : JSON.stringify(data, null, 2) + '\n';
 }
 
 export async function fileExists(path: string): Promise<boolean> {
@@ -38,8 +63,33 @@ export async function findFileUp(filename: string, startDir: string): Promise<st
   }
 }
 
-export async function readMetaConfig(cwd: string): Promise<MetaConfig> {
-  const metaPath = await findFileUp(META_FILE, cwd);
+export async function findMetaFileUp(startDir: string): Promise<string | null> {
+  let currentDir = startDir;
+
+  while (true) {
+    for (const candidate of META_FILE_CANDIDATES) {
+      const filePath = join(currentDir, candidate);
+      if (await fileExists(filePath)) {
+        return filePath;
+      }
+    }
+
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) {
+      return null;
+    }
+    currentDir = parentDir;
+  }
+}
+
+export interface MetaConfigResult {
+  config: MetaConfig;
+  format: ConfigFormat;
+  metaDir: string;
+}
+
+export async function readMetaConfig(cwd: string): Promise<MetaConfigResult> {
+  const metaPath = await findMetaFileUp(cwd);
 
   if (!metaPath) {
     throw new ConfigError(
@@ -47,25 +97,32 @@ export async function readMetaConfig(cwd: string): Promise<MetaConfig> {
     );
   }
 
+  const format = detectFormat(metaPath);
+
   try {
     const content = await readFile(metaPath, 'utf-8');
-    const parsed = JSON.parse(content);
-    return MetaConfigSchema.parse(parsed);
+    const parsed = parseContent(content, format);
+    const config = MetaConfigSchema.parse(parsed);
+    return { config, format, metaDir: dirname(metaPath) };
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new ConfigError(`Invalid JSON in ${META_FILE} file`, metaPath);
+      throw new ConfigError(`Invalid JSON in config file`, metaPath);
+    }
+    if (error instanceof Error && error.name === 'YAMLParseError') {
+      throw new ConfigError(`Invalid YAML in config file`, metaPath);
     }
     if (error instanceof Error && error.name === 'ZodError') {
-      throw new ConfigError(`Invalid ${META_FILE} file structure: ${error.message}`, metaPath);
+      throw new ConfigError(`Invalid config file structure: ${error.message}`, metaPath);
     }
     throw error;
   }
 }
 
-export async function writeMetaConfig(cwd: string, config: MetaConfig): Promise<void> {
-  const metaPath = join(cwd, META_FILE);
+export async function writeMetaConfig(cwd: string, config: MetaConfig, format: ConfigFormat = 'json'): Promise<void> {
+  const filename = filenameForFormat(format);
+  const metaPath = join(cwd, filename);
   const validated = MetaConfigSchema.parse(config);
-  const content = JSON.stringify(validated, null, 2) + '\n';
+  const content = serializeContent(validated, format);
   await writeFile(metaPath, content, 'utf-8');
 }
 
@@ -86,7 +143,7 @@ export async function readLoopRc(cwd: string): Promise<LoopRc | null> {
 }
 
 export function getMetaDir(cwd: string): Promise<string | null> {
-  return findFileUp(META_FILE, cwd).then((path) => (path ? dirname(path) : null));
+  return findMetaFileUp(cwd).then((path) => (path ? dirname(path) : null));
 }
 
 export function createDefaultConfig(): MetaConfig {
