@@ -9,12 +9,15 @@ import {
   getProjectPaths,
   getProjectUrl,
   findFileUp,
+  findMetaFileUp,
   fileExists,
   addToGitignore,
   ConfigError,
   normalizeCommand,
   getCommand,
   listCommands,
+  detectFormat,
+  filenameForFormat,
 } from '../../../src/core/config.js';
 
 vi.mock('node:fs/promises', async () => {
@@ -214,6 +217,104 @@ describe('config', () => {
     });
   });
 
+  describe('detectFormat', () => {
+    it('returns json for .gogo file', () => {
+      expect(detectFormat('/project/.gogo')).toBe('json');
+    });
+
+    it('returns yaml for .gogo.yaml file', () => {
+      expect(detectFormat('/project/.gogo.yaml')).toBe('yaml');
+    });
+
+    it('returns yaml for .gogo.yml file', () => {
+      expect(detectFormat('/project/.gogo.yml')).toBe('yaml');
+    });
+
+    it('returns json for unknown extensions', () => {
+      expect(detectFormat('/project/.gogo.toml')).toBe('json');
+    });
+  });
+
+  describe('filenameForFormat', () => {
+    it('returns .gogo for json format', () => {
+      expect(filenameForFormat('json')).toBe('.gogo');
+    });
+
+    it('returns .gogo.yaml for yaml format', () => {
+      expect(filenameForFormat('yaml')).toBe('.gogo.yaml');
+    });
+  });
+
+  describe('findMetaFileUp', () => {
+    it('finds .gogo file', async () => {
+      vol.fromJSON({ '/project/.gogo': '{}' });
+
+      const result = await findMetaFileUp('/project');
+      expect(result).toBe('/project/.gogo');
+    });
+
+    it('finds .gogo.yaml file', async () => {
+      vol.fromJSON({ '/project/.gogo.yaml': 'projects: {}' });
+
+      const result = await findMetaFileUp('/project');
+      expect(result).toBe('/project/.gogo.yaml');
+    });
+
+    it('finds .gogo.yml file', async () => {
+      vol.fromJSON({ '/project/.gogo.yml': 'projects: {}' });
+
+      const result = await findMetaFileUp('/project');
+      expect(result).toBe('/project/.gogo.yml');
+    });
+
+    it('prefers .gogo over .gogo.yaml in same directory', async () => {
+      vol.fromJSON({
+        '/project/.gogo': '{"projects":{}}',
+        '/project/.gogo.yaml': 'projects: {}',
+      });
+
+      const result = await findMetaFileUp('/project');
+      expect(result).toBe('/project/.gogo');
+    });
+
+    it('prefers .gogo.yaml over .gogo.yml in same directory', async () => {
+      vol.fromJSON({
+        '/project/.gogo.yaml': 'projects: {}',
+        '/project/.gogo.yml': 'projects: {}',
+      });
+
+      const result = await findMetaFileUp('/project');
+      expect(result).toBe('/project/.gogo.yaml');
+    });
+
+    it('finds config in parent directory', async () => {
+      vol.fromJSON({
+        '/project/.gogo.yaml': 'projects: {}',
+        '/project/sub/file.txt': '',
+      });
+
+      const result = await findMetaFileUp('/project/sub');
+      expect(result).toBe('/project/.gogo.yaml');
+    });
+
+    it('prefers child directory match over parent', async () => {
+      vol.fromJSON({
+        '/parent/.gogo': '{"projects":{}}',
+        '/parent/child/.gogo.yaml': 'projects: {}',
+      });
+
+      const result = await findMetaFileUp('/parent/child');
+      expect(result).toBe('/parent/child/.gogo.yaml');
+    });
+
+    it('returns null when no config file found', async () => {
+      vol.fromJSON({ '/project/file.txt': '' });
+
+      const result = await findMetaFileUp('/project');
+      expect(result).toBeNull();
+    });
+  });
+
   describe('readMetaConfig', () => {
     it('reads and parses valid .gogo file', async () => {
       const metaContent = JSON.stringify({
@@ -222,13 +323,15 @@ describe('config', () => {
       });
       vol.fromJSON({ '/project/.gogo': metaContent });
 
-      const config = await readMetaConfig('/project');
+      const { config, format, metaDir } = await readMetaConfig('/project');
 
       expect(config.projects['libs/core']).toBe('git@github.com:org/core.git');
       expect(config.ignore).toContain('.git');
+      expect(format).toBe('json');
+      expect(metaDir).toBe('/project');
     });
 
-    it('throws ConfigError when .gogo file not found', async () => {
+    it('throws ConfigError when config file not found', async () => {
       vol.fromJSON({ '/project/file.txt': '' });
 
       await expect(readMetaConfig('/project')).rejects.toThrow(ConfigError);
@@ -243,9 +346,69 @@ describe('config', () => {
     it('provides default ignore when not specified', async () => {
       vol.fromJSON({ '/project/.gogo': '{"projects":{}}' });
 
-      const config = await readMetaConfig('/project');
+      const { config } = await readMetaConfig('/project');
       expect(config.ignore).toContain('.git');
       expect(config.ignore).toContain('node_modules');
+    });
+  });
+
+  describe('readMetaConfig with YAML', () => {
+    it('reads and parses valid .gogo.yaml file', async () => {
+      const yamlContent = 'projects:\n  libs/core: "git@github.com:org/core.git"\nignore:\n  - .git\n';
+      vol.fromJSON({ '/project/.gogo.yaml': yamlContent });
+
+      const { config, format, metaDir } = await readMetaConfig('/project');
+
+      expect(format).toBe('yaml');
+      expect(metaDir).toBe('/project');
+      expect(config.projects['libs/core']).toBe('git@github.com:org/core.git');
+      expect(config.ignore).toContain('.git');
+    });
+
+    it('reads and parses valid .gogo.yml file', async () => {
+      const yamlContent = 'projects:\n  api: "git@github.com:org/api.git"\nignore:\n  - .git\n';
+      vol.fromJSON({ '/project/.gogo.yml': yamlContent });
+
+      const { config, format } = await readMetaConfig('/project');
+
+      expect(format).toBe('yaml');
+      expect(config.projects['api']).toBe('git@github.com:org/api.git');
+    });
+
+    it('throws ConfigError for invalid YAML', async () => {
+      vol.fromJSON({ '/project/.gogo.yaml': '{ invalid yaml: [' });
+
+      await expect(readMetaConfig('/project')).rejects.toThrow(ConfigError);
+    });
+
+    it('throws ConfigError for YAML with invalid structure', async () => {
+      vol.fromJSON({ '/project/.gogo.yaml': 'projects: "not-an-object"' });
+
+      await expect(readMetaConfig('/project')).rejects.toThrow(ConfigError);
+    });
+
+    it('provides default ignore when not specified in YAML', async () => {
+      vol.fromJSON({ '/project/.gogo.yaml': 'projects: {}' });
+
+      const { config } = await readMetaConfig('/project');
+      expect(config.ignore).toContain('.git');
+      expect(config.ignore).toContain('node_modules');
+    });
+
+    it('parses YAML with commands', async () => {
+      const yamlContent = [
+        'projects: {}',
+        'commands:',
+        '  build: npm run build',
+        '  test:',
+        '    cmd: npm test',
+        '    parallel: true',
+      ].join('\n');
+      vol.fromJSON({ '/project/.gogo.yaml': yamlContent });
+
+      const { config } = await readMetaConfig('/project');
+      expect(config.commands?.build).toBe('npm run build');
+      expect(config.commands?.test).toEqual({ cmd: 'npm test', parallel: true });
     });
   });
 
@@ -273,6 +436,58 @@ describe('config', () => {
 
       const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
       expect(content).toContain('\n');
+    });
+
+    it('defaults to JSON format', async () => {
+      vol.fromJSON({ '/project': null });
+
+      await writeMetaConfig('/project', createDefaultConfig());
+
+      expect(vol.existsSync('/project/.gogo')).toBe(true);
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(false);
+    });
+  });
+
+  describe('writeMetaConfig with YAML', () => {
+    it('writes config as YAML when format is yaml', async () => {
+      vol.fromJSON({ '/project': null });
+
+      const config = { projects: { test: 'url' }, ignore: ['.git'] };
+      await writeMetaConfig('/project', config, 'yaml');
+
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(true);
+      expect(vol.existsSync('/project/.gogo')).toBe(false);
+      const content = vol.readFileSync('/project/.gogo.yaml', 'utf-8') as string;
+      expect(content).toContain('projects:');
+      expect(content).toContain('test: url');
+    });
+
+    it('writes config as JSON when format is json', async () => {
+      vol.fromJSON({ '/project': null });
+
+      const config = { projects: { test: 'url' }, ignore: ['.git'] };
+      await writeMetaConfig('/project', config, 'json');
+
+      expect(vol.existsSync('/project/.gogo')).toBe(true);
+      const content = vol.readFileSync('/project/.gogo', 'utf-8') as string;
+      const parsed = JSON.parse(content);
+      expect(parsed.projects.test).toBe('url');
+    });
+
+    it('round-trips YAML config correctly', async () => {
+      const yamlContent = 'projects:\n  api: "git@github.com:org/api.git"\nignore:\n  - .git\n';
+      vol.fromJSON({ '/project/.gogo.yaml': yamlContent });
+
+      const { config, format } = await readMetaConfig('/project');
+
+      vol.reset();
+      vol.fromJSON({ '/project': null });
+
+      await writeMetaConfig('/project', config, format);
+
+      const { config: reread, format: rereadFormat } = await readMetaConfig('/project');
+      expect(reread).toEqual(config);
+      expect(rereadFormat).toBe('yaml');
     });
   });
 
@@ -376,7 +591,7 @@ describe('config', () => {
         }),
       });
 
-      const config = await readMetaConfig('/project');
+      const { config } = await readMetaConfig('/project');
       expect(config.commands?.build).toBe('npm run build');
     });
 
@@ -396,7 +611,7 @@ describe('config', () => {
         }),
       });
 
-      const config = await readMetaConfig('/project');
+      const { config } = await readMetaConfig('/project');
       expect(config.commands?.test).toEqual({
         cmd: 'npm test',
         parallel: true,
@@ -417,7 +632,7 @@ describe('config', () => {
         }),
       });
 
-      const config = await readMetaConfig('/project');
+      const { config } = await readMetaConfig('/project');
       expect(config.commands?.build).toBe('npm run build');
       expect(config.commands?.test).toEqual({ cmd: 'npm test', parallel: true });
     });
