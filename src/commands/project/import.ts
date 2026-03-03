@@ -55,9 +55,9 @@ export async function importCommand(
       output.info(`Provided: ${url}`);
     }
 
-    const config = await readMetaConfig(metaDir);
+    const { config, format } = await readMetaConfig(metaDir);
     const updatedConfig = addProject(config, folder, finalUrl!);
-    await writeMetaConfig(metaDir, updatedConfig);
+    await writeMetaConfig(metaDir, updatedConfig, format);
 
     output.success(`Imported existing project "${folder}"`);
     output.info(`Repository URL: ${finalUrl}`);
@@ -67,9 +67,9 @@ export async function importCommand(
     }
 
     if (options.noClone) {
-      const config = await readMetaConfig(metaDir);
+      const { config, format } = await readMetaConfig(metaDir);
       const updatedConfig = addProject(config, folder, url);
-      await writeMetaConfig(metaDir, updatedConfig);
+      await writeMetaConfig(metaDir, updatedConfig, format);
       const added = await addToGitignore(metaDir, folder);
       output.success(`Registered project "${folder}" (not cloned)`);
       if (added) {
@@ -92,9 +92,9 @@ export async function importCommand(
       throw new Error(`Failed to clone repository: ${cloneResult.stderr}`);
     }
 
-    const config = await readMetaConfig(metaDir);
+    const { config, format } = await readMetaConfig(metaDir);
     const updatedConfig = addProject(config, folder, url);
-    await writeMetaConfig(metaDir, updatedConfig);
+    await writeMetaConfig(metaDir, updatedConfig, format);
 
     output.success(`Imported project "${folder}"`);
   }

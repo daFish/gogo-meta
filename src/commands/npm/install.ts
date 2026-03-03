@@ -23,7 +23,7 @@ export async function installCommand(
     throw new Error('Not in a gogo-meta repository. Run "gogo init" first.');
   }
 
-  const config = await readMetaConfig(cwd);
+  const { config } = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
   const command = `npm ${variant}`;
