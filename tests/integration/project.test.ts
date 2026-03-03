@@ -246,4 +246,48 @@ describe('project commands', () => {
       expect(apiMatches).toHaveLength(1);
     });
   });
+
+  describe('YAML format preservation', () => {
+    it('preserves YAML format when adding project via create', async () => {
+      vol.fromJSON({
+        '/project/.gogo.yaml': 'projects: {}\nignore: []\n',
+        '/project/.gitignore': '',
+      });
+
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await createCommand('api', 'git@github.com:org/api.git');
+
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(true);
+      expect(vol.existsSync('/project/.gogo')).toBe(false);
+      const content = vol.readFileSync('/project/.gogo.yaml', 'utf-8') as string;
+      expect(content).toContain('api: git@github.com:org/api.git');
+    });
+
+    it('preserves YAML format when importing project with --no-clone', async () => {
+      vol.fromJSON({
+        '/project/.gogo.yaml': 'projects: {}\nignore: []\n',
+      });
+
+      await importCommand('api', 'git@github.com:org/api.git', { noClone: true });
+
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(true);
+      expect(vol.existsSync('/project/.gogo')).toBe(false);
+      const content = vol.readFileSync('/project/.gogo.yaml', 'utf-8') as string;
+      expect(content).toContain('api: git@github.com:org/api.git');
+    });
+
+    it('preserves YAML format when importing project with clone', async () => {
+      vol.fromJSON({
+        '/project/.gogo.yaml': 'projects: {}\nignore: []\n',
+      });
+
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      await importCommand('api', 'git@github.com:org/api.git');
+
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(true);
+      expect(vol.existsSync('/project/.gogo')).toBe(false);
+    });
+  });
 });

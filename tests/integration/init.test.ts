@@ -80,4 +80,48 @@ describe('init command', () => {
 
     expect(output.warning).toHaveBeenCalledWith(expect.stringContaining('Overwriting'));
   });
+
+  describe('YAML format', () => {
+    it('creates .gogo.yaml file when format is yaml', async () => {
+      vol.fromJSON({ '/project': null });
+
+      await initCommand({ format: 'yaml' });
+
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(true);
+      expect(vol.existsSync('/project/.gogo')).toBe(false);
+
+      const content = vol.readFileSync('/project/.gogo.yaml', 'utf-8') as string;
+      expect(content).toContain('projects:');
+    });
+
+    it('creates .gogo file when format is json (default)', async () => {
+      vol.fromJSON({ '/project': null });
+
+      await initCommand({ format: 'json' });
+
+      expect(vol.existsSync('/project/.gogo')).toBe(true);
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(false);
+    });
+
+    it('detects existing .gogo.yaml when checking for conflicts', async () => {
+      vol.fromJSON({ '/project/.gogo.yaml': 'projects: {}' });
+
+      await expect(initCommand({ format: 'json' })).rejects.toThrow('already exists');
+    });
+
+    it('detects existing .gogo.yml when checking for conflicts', async () => {
+      vol.fromJSON({ '/project/.gogo.yml': 'projects: {}' });
+
+      await expect(initCommand()).rejects.toThrow('already exists');
+    });
+
+    it('removes all config variants when force overwriting with different format', async () => {
+      vol.fromJSON({ '/project/.gogo': '{"projects":{}}' });
+
+      await initCommand({ force: true, format: 'yaml' });
+
+      expect(vol.existsSync('/project/.gogo.yaml')).toBe(true);
+      expect(vol.existsSync('/project/.gogo')).toBe(false);
+    });
+  });
 });
