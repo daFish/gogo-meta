@@ -1,7 +1,7 @@
 import { join, basename } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { execute } from '../../core/executor.js';
-import { readMetaConfig, fileExists } from '../../core/config.js';
+import { readMetaConfig, findMetaFileUp, fileExists } from '../../core/config.js';
 import { ensureSshHostsKnown } from '../../core/ssh.js';
 import * as output from '../../core/output.js';
 
@@ -39,13 +39,13 @@ export async function cloneCommand(url: string, options: CloneOptions = {}): Pro
 
   output.success(`Cloned meta repository to ${repoName}`);
 
-  const metaPath = join(targetDir, '.gogo');
-  if (!(await fileExists(metaPath))) {
-    output.warning('No .gogo file found in cloned repository');
+  const metaPath = await findMetaFileUp(targetDir);
+  if (!metaPath) {
+    output.warning('No config file found in cloned repository');
     return;
   }
 
-  const config = await readMetaConfig(targetDir);
+  const { config } = await readMetaConfig(targetDir);
   const projects = Object.entries(config.projects);
 
   if (projects.length === 0) {

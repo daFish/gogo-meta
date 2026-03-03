@@ -23,7 +23,7 @@ export async function updateCommand(options: UpdateOptions = {}): Promise<void> 
     throw new Error('Not in a gogo-meta repository. Run "gogo init" first.');
   }
 
-  const config = await readMetaConfig(cwd);
+  const { config } = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
   let projectEntries = Object.entries(config.projects);

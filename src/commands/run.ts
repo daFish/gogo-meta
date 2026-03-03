@@ -43,7 +43,7 @@ export async function runCommand(name: string | undefined, options: RunOptions =
     throw new Error('Not in a gogo-meta repository. Run "gogo init" first.');
   }
 
-  const config = await readMetaConfig(cwd);
+  const { config } = await readMetaConfig(cwd);
 
   if (options.list || name === undefined) {
     formatCommandList(listCommands(config));
