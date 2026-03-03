@@ -82,6 +82,9 @@ gogo npm install|ci|link|run
 
 ### .gogo (project config)
 
+Supports both JSON (`.gogo`) and YAML (`.gogo.yaml` / `.gogo.yml`) formats.
+Precedence: `.gogo` > `.gogo.yaml` > `.gogo.yml`.
+
 ```json
 {
   "projects": {
@@ -93,6 +96,19 @@ gogo npm install|ci|link|run
     "test": { "cmd": "npm test", "parallel": true }
   }
 }
+```
+
+```yaml
+projects:
+  path/to/repo: git@github.com:org/repo.git
+ignore:
+  - .git
+  - node_modules
+commands:
+  build: npm run build
+  test:
+    cmd: npm test
+    parallel: true
 ```
 
 ### .looprc (optional filtering)

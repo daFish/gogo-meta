@@ -10,6 +10,7 @@ A modern TypeScript CLI for managing multi-repository projects. Execute commands
 - Flexible filtering (include/exclude by name or pattern)
 - NPM operations across all projects
 - Symlink projects for local development
+- JSON and YAML configuration formats
 
 ## Installation
 
@@ -79,7 +80,11 @@ gogo exec "git status" --parallel
 
 ### .gogo
 
-The `.gogo` file defines child repositories, ignore patterns, and predefined commands:
+The config file defines child repositories, ignore patterns, and predefined commands. Both JSON and YAML formats are supported.
+
+gogo looks for config files in the following order of precedence: `.gogo` (JSON) > `.gogo.yaml` > `.gogo.yml`. The first file found is used.
+
+#### JSON format (.gogo)
 
 ```json
 {
@@ -104,6 +109,37 @@ The `.gogo` file defines child repositories, ignore patterns, and predefined com
     }
   }
 }
+```
+
+#### YAML format (.gogo.yaml)
+
+```yaml
+# Main services
+projects:
+  api: git@github.com:org/api.git
+  web: git@github.com:org/web.git
+  libs/shared: git@github.com:org/shared.git
+
+ignore:
+  - .git
+  - node_modules
+  - .vagrant
+  - .vscode
+
+# Predefined commands
+commands:
+  build: npm run build
+  test:
+    cmd: npm test
+    parallel: true
+    description: Run tests in all projects
+  deploy:
+    cmd: npm run deploy
+    parallel: true
+    concurrency: 2
+    includeOnly:
+      - api
+      - web
 ```
 
 ### .looprc (optional)
@@ -135,16 +171,18 @@ These options are available for most commands:
 
 ### `gogo init`
 
-Initialize a new gogo-meta repository by creating a `.gogo` file.
+Initialize a new gogo-meta repository by creating a config file.
 
 ```bash
-gogo init
-gogo init --force  # Overwrite existing .gogo file
+gogo init                  # Create .gogo (JSON, default)
+gogo init --format yaml    # Create .gogo.yaml (YAML)
+gogo init --force          # Overwrite existing config file
 ```
 
-| Option        | Description                     |
-| ------------- | ------------------------------- |
-| `-f, --force` | Overwrite existing `.gogo` file |
+| Option              | Description                                    |
+| ------------------- | ---------------------------------------------- |
+| `-f, --force`       | Overwrite existing config file                 |
+| `--format <format>` | Config file format: `json` (default) or `yaml` |
 
 ---
 
