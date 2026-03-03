@@ -1,3 +1,11 @@
+# [1.4.0](https://github.com/daFish/gogo-meta/compare/v1.3.0...v1.4.0) (2026-03-03)
+
+
+### Features
+
+* **config:** add YAML support for .gogo configuration files ([d298ebc](https://github.com/daFish/gogo-meta/commit/d298ebcfc0f958bf821cbe573483bc4b907f6411))
+* **init:** add --format flag to choose JSON or YAML config ([c2117bb](https://github.com/daFish/gogo-meta/commit/c2117bba37bb1f4e2ba56d6d95362cc59e8bafe3))
+
 # [1.3.0](https://github.com/daFish/gogo-meta/compare/v1.2.0...v1.3.0) (2026-02-12)
 
 
