@@ -18,6 +18,10 @@ import {
   listCommands,
   detectFormat,
   filenameForFormat,
+  mergeConfigs,
+  readOverlayConfig,
+  setOverlayFiles,
+  getOverlayFiles,
 } from '../../../src/core/config.js';
 
 vi.mock('node:fs/promises', async () => {
@@ -579,6 +583,223 @@ describe('config', () => {
         { name: 'build', command: { cmd: 'npm run build' } },
         { name: 'test', command: { cmd: 'npm test', description: 'Run all tests' } },
       ]);
+    });
+  });
+
+  describe('setOverlayFiles / getOverlayFiles', () => {
+    it('defaults to empty array', () => {
+      setOverlayFiles([]);
+      expect(getOverlayFiles()).toEqual([]);
+    });
+
+    it('stores and retrieves overlay files', () => {
+      setOverlayFiles(['.gogo.devops', '.gogo.staging']);
+      expect(getOverlayFiles()).toEqual(['.gogo.devops', '.gogo.staging']);
+      setOverlayFiles([]);
+    });
+  });
+
+  describe('mergeConfigs', () => {
+    it('unions projects from base and overlay', () => {
+      const base = { projects: { a: 'url1' }, ignore: [] };
+      const overlay = { projects: { b: 'url2' }, ignore: [] };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.projects).toEqual({ a: 'url1', b: 'url2' });
+    });
+
+    it('overlay wins on project key conflict', () => {
+      const base = { projects: { a: 'url1' }, ignore: [] };
+      const overlay = { projects: { a: 'url2' }, ignore: [] };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.projects.a).toBe('url2');
+    });
+
+    it('concatenates and deduplicates ignore arrays', () => {
+      const base = { projects: {}, ignore: ['.git', 'node_modules'] };
+      const overlay = { projects: {}, ignore: ['node_modules', 'dist'] };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.ignore).toEqual(['.git', 'node_modules', 'dist']);
+    });
+
+    it('unions commands with overlay winning on conflict', () => {
+      const base = {
+        projects: {},
+        ignore: [],
+        commands: { build: 'npm run build', test: 'npm test' },
+      };
+      const overlay = {
+        projects: {},
+        ignore: [],
+        commands: { test: 'bun test', deploy: 'npm run deploy' },
+      };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.commands?.build).toBe('npm run build');
+      expect(merged.commands?.test).toBe('bun test');
+      expect(merged.commands?.deploy).toBe('npm run deploy');
+    });
+
+    it('handles undefined commands in base', () => {
+      const base = { projects: {}, ignore: [] };
+      const overlay = { projects: {}, ignore: [], commands: { build: 'npm run build' } };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.commands?.build).toBe('npm run build');
+    });
+
+    it('handles undefined commands in overlay', () => {
+      const base = { projects: {}, ignore: [], commands: { build: 'npm run build' } };
+      const overlay = { projects: {}, ignore: [] };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.commands?.build).toBe('npm run build');
+    });
+
+    it('handles undefined commands in both', () => {
+      const base = { projects: {}, ignore: [] };
+      const overlay = { projects: {}, ignore: [] };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.commands).toBeUndefined();
+    });
+
+    it('empty overlay is a no-op', () => {
+      const base = {
+        projects: { a: 'url1' },
+        ignore: ['.git'],
+        commands: { build: 'npm run build' },
+      };
+      const overlay = { projects: {}, ignore: [] };
+      const merged = mergeConfigs(base, overlay);
+
+      expect(merged.projects).toEqual({ a: 'url1' });
+      expect(merged.ignore).toEqual(['.git']);
+      expect(merged.commands?.build).toBe('npm run build');
+    });
+  });
+
+  describe('readOverlayConfig', () => {
+    it('reads valid JSON overlay file', async () => {
+      vol.fromJSON({
+        '/project/.gogo.devops': JSON.stringify({
+          projects: { infra: 'git@github.com:org/infra.git' },
+        }),
+      });
+
+      const config = await readOverlayConfig('/project/.gogo.devops');
+      expect(config.projects.infra).toBe('git@github.com:org/infra.git');
+    });
+
+    it('reads valid YAML overlay file', async () => {
+      vol.fromJSON({
+        '/project/.gogo.devops.yaml': 'projects:\n  infra: "git@github.com:org/infra.git"\n',
+      });
+
+      const config = await readOverlayConfig('/project/.gogo.devops.yaml');
+      expect(config.projects.infra).toBe('git@github.com:org/infra.git');
+    });
+
+    it('throws ConfigError for missing file', async () => {
+      vol.fromJSON({});
+
+      await expect(readOverlayConfig('/project/.gogo.devops')).rejects.toThrow(ConfigError);
+      await expect(readOverlayConfig('/project/.gogo.devops')).rejects.toThrow('not found');
+    });
+
+    it('throws ConfigError for invalid JSON', async () => {
+      vol.fromJSON({ '/project/.gogo.devops': 'not json' });
+
+      await expect(readOverlayConfig('/project/.gogo.devops')).rejects.toThrow(ConfigError);
+    });
+
+    it('throws ConfigError for invalid structure', async () => {
+      vol.fromJSON({
+        '/project/.gogo.devops': JSON.stringify({ invalid: true }),
+      });
+
+      await expect(readOverlayConfig('/project/.gogo.devops')).rejects.toThrow(ConfigError);
+    });
+  });
+
+  describe('readMetaConfig with overlays', () => {
+    it('returns primary only when overlayFiles is empty', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: { a: 'url1' } }),
+        '/project/.gogo.devops': JSON.stringify({ projects: { b: 'url2' } }),
+      });
+
+      const { config } = await readMetaConfig('/project', []);
+      expect(config.projects).toEqual({ a: 'url1' });
+    });
+
+    it('merges a single overlay file', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: { a: 'url1' } }),
+        '/project/.gogo.devops': JSON.stringify({ projects: { b: 'url2' } }),
+      });
+
+      const { config } = await readMetaConfig('/project', ['.gogo.devops']);
+      expect(config.projects).toEqual({ a: 'url1', b: 'url2' });
+    });
+
+    it('merges multiple overlay files in order', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: { a: 'url1' } }),
+        '/project/.gogo.devops': JSON.stringify({ projects: { b: 'url2' } }),
+        '/project/.gogo.staging': JSON.stringify({ projects: { c: 'url3', a: 'url-override' } }),
+      });
+
+      const { config } = await readMetaConfig('/project', ['.gogo.devops', '.gogo.staging']);
+      expect(config.projects).toEqual({ a: 'url-override', b: 'url2', c: 'url3' });
+    });
+
+    it('resolves overlay paths relative to metaDir', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: { a: 'url1' } }),
+        '/project/.gogo.devops': JSON.stringify({ projects: { b: 'url2' } }),
+        '/project/sub/file.txt': '',
+      });
+
+      const { config } = await readMetaConfig('/project/sub', ['.gogo.devops']);
+      expect(config.projects).toEqual({ a: 'url1', b: 'url2' });
+    });
+
+    it('throws ConfigError for missing overlay file', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: {} }),
+      });
+
+      await expect(readMetaConfig('/project', ['.gogo.nonexistent'])).rejects.toThrow(ConfigError);
+      await expect(readMetaConfig('/project', ['.gogo.nonexistent'])).rejects.toThrow('not found');
+    });
+
+    it('uses global overlay files when parameter not provided', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({ projects: { a: 'url1' } }),
+        '/project/.gogo.devops': JSON.stringify({ projects: { b: 'url2' } }),
+      });
+
+      setOverlayFiles(['.gogo.devops']);
+      try {
+        const { config } = await readMetaConfig('/project');
+        expect(config.projects).toEqual({ a: 'url1', b: 'url2' });
+      } finally {
+        setOverlayFiles([]);
+      }
+    });
+
+    it('preserves primary format and metaDir when merging overlays', async () => {
+      vol.fromJSON({
+        '/project/.gogo.yaml': 'projects:\n  a: url1\n',
+        '/project/.gogo.devops': JSON.stringify({ projects: { b: 'url2' } }),
+      });
+
+      const { format, metaDir } = await readMetaConfig('/project', ['.gogo.devops']);
+      expect(format).toBe('yaml');
+      expect(metaDir).toBe('/project');
     });
   });
 
