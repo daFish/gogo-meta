@@ -1,5 +1,5 @@
 import { readFile, writeFile, appendFile, access } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { MetaConfigSchema, LoopRcSchema, type MetaConfig, type LoopRc, type CommandConfig, type ConfigFormat } from '../types/index.js';
 
@@ -35,6 +35,32 @@ function serializeContent(data: unknown, format: ConfigFormat): string {
   return format === 'yaml'
     ? stringifyYaml(data, { indent: 2 })
     : JSON.stringify(data, null, 2) + '\n';
+}
+
+let _overlayFiles: string[] = [];
+
+export function setOverlayFiles(files: string[]): void {
+  _overlayFiles = files;
+}
+
+export function getOverlayFiles(): string[] {
+  return _overlayFiles;
+}
+
+export function mergeConfigs(base: MetaConfig, overlay: MetaConfig): MetaConfig {
+  return {
+    projects: {
+      ...base.projects,
+      ...overlay.projects,
+    },
+    ignore: [...new Set([...base.ignore, ...overlay.ignore])],
+    commands: base.commands || overlay.commands
+      ? {
+          ...base.commands,
+          ...overlay.commands,
+        }
+      : undefined,
+  };
 }
 
 export async function fileExists(path: string): Promise<boolean> {
@@ -88,7 +114,32 @@ export interface MetaConfigResult {
   metaDir: string;
 }
 
-export async function readMetaConfig(cwd: string): Promise<MetaConfigResult> {
+export async function readOverlayConfig(filePath: string): Promise<MetaConfig> {
+  if (!(await fileExists(filePath))) {
+    throw new ConfigError(`Overlay config file not found: ${filePath}`, filePath);
+  }
+
+  const format = detectFormat(filePath);
+
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    const parsed = parseContent(content, format);
+    return MetaConfigSchema.parse(parsed);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new ConfigError(`Invalid JSON in overlay config file`, filePath);
+    }
+    if (error instanceof Error && error.name === 'YAMLParseError') {
+      throw new ConfigError(`Invalid YAML in overlay config file`, filePath);
+    }
+    if (error instanceof Error && error.name === 'ZodError') {
+      throw new ConfigError(`Invalid overlay config file structure: ${error.message}`, filePath);
+    }
+    throw error;
+  }
+}
+
+export async function readMetaConfig(cwd: string, overlayFiles?: string[]): Promise<MetaConfigResult> {
   const metaPath = await findMetaFileUp(cwd);
 
   if (!metaPath) {
@@ -98,12 +149,13 @@ export async function readMetaConfig(cwd: string): Promise<MetaConfigResult> {
   }
 
   const format = detectFormat(metaPath);
+  const metaDir = dirname(metaPath);
 
+  let config: MetaConfig;
   try {
     const content = await readFile(metaPath, 'utf-8');
     const parsed = parseContent(content, format);
-    const config = MetaConfigSchema.parse(parsed);
-    return { config, format, metaDir: dirname(metaPath) };
+    config = MetaConfigSchema.parse(parsed);
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new ConfigError(`Invalid JSON in config file`, metaPath);
@@ -116,6 +168,15 @@ export async function readMetaConfig(cwd: string): Promise<MetaConfigResult> {
     }
     throw error;
   }
+
+  const filesToMerge = overlayFiles ?? _overlayFiles;
+  for (const overlayRelPath of filesToMerge) {
+    const overlayPath = resolve(metaDir, overlayRelPath);
+    const overlayConfig = await readOverlayConfig(overlayPath);
+    config = mergeConfigs(config, overlayConfig);
+  }
+
+  return { config, format, metaDir };
 }
 
 export async function writeMetaConfig(cwd: string, config: MetaConfig, format: ConfigFormat = 'json'): Promise<void> {
