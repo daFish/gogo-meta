@@ -38,7 +38,7 @@ export async function createCommand(folder: string, url: string): Promise<void> 
     throw new Error(`Failed to add remote: ${remoteResult.stderr}`);
   }
 
-  const { config, format } = await readMetaConfig(metaDir);
+  const { config, format } = await readMetaConfig(metaDir, []);
   const updatedConfig = addProject(config, folder, url);
   await writeMetaConfig(metaDir, updatedConfig, format);
 
