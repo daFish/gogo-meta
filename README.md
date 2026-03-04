@@ -11,6 +11,7 @@ A modern TypeScript CLI for managing multi-repository projects. Execute commands
 - NPM operations across all projects
 - Symlink projects for local development
 - JSON and YAML configuration formats
+- Multiple config files with `-f` flag (like Docker Compose)
 
 ## Installation
 
@@ -142,6 +143,27 @@ commands:
       - web
 ```
 
+### Multiple Config Files
+
+For large projects you can split configuration across multiple files and merge them at runtime using the `-f, --file` flag:
+
+```bash
+# Load primary .gogo plus additional projects from .gogo.devops
+gogo -f .gogo.devops exec "npm test"
+
+# Multiple overlays are applied in order
+gogo -f .gogo.devops -f .gogo.extra git status
+```
+
+Overlay files follow the same format as the primary config (JSON or YAML). When merging:
+- **Projects**: overlay entries are added; on key conflict the overlay wins
+- **Ignore**: arrays are concatenated and deduplicated
+- **Commands**: overlay entries are added; on key conflict the overlay wins
+
+Overlay paths are resolved relative to the directory containing the primary config file.
+
+Write commands (`project create`, `project import`) only modify the primary config file — overlay projects are never absorbed into it.
+
 ### .looprc (optional)
 
 Define default ignore patterns for command execution:
@@ -158,14 +180,15 @@ Define default ignore patterns for command execution:
 
 These options are available for most commands:
 
-| Option                      | Description                                         |
-| --------------------------- | --------------------------------------------------- |
-| `--include-only <dirs>`     | Only target specified directories (comma-separated) |
-| `--exclude-only <dirs>`     | Exclude specified directories (comma-separated)     |
-| `--include-pattern <regex>` | Include directories matching regex pattern          |
-| `--exclude-pattern <regex>` | Exclude directories matching regex pattern          |
-| `--parallel`                | Execute commands concurrently                       |
-| `--concurrency <n>`         | Maximum parallel processes (default: 4)             |
+| Option                      | Description                                              |
+| --------------------------- | -------------------------------------------------------- |
+| `-f, --file <path>`         | Additional config file to merge (repeatable)             |
+| `--include-only <dirs>`     | Only target specified directories (comma-separated)      |
+| `--exclude-only <dirs>`     | Exclude specified directories (comma-separated)          |
+| `--include-pattern <regex>` | Include directories matching regex pattern               |
+| `--exclude-pattern <regex>` | Exclude directories matching regex pattern               |
+| `--parallel`                | Execute commands concurrently                            |
+| `--concurrency <n>`         | Maximum parallel processes (default: 4)                  |
 
 ---
 

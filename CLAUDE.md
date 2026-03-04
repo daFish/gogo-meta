@@ -61,6 +61,10 @@ gogo git update                    # Clone missing repos
 gogo git status|pull|push|branch|checkout|commit
 gogo project create|import
 gogo npm install|ci|link|run
+
+# Global options
+gogo -f .gogo.devops exec "..."    # Merge additional config file
+gogo -f a.yaml -f b.yaml exec "..."  # Multiple overlays
 ```
 
 ## Code Conventions
