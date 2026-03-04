@@ -8,6 +8,7 @@ import { registerRunCommand } from './commands/run.js';
 import { registerGitCommands } from './commands/git/index.js';
 import { registerProjectCommands } from './commands/project/index.js';
 import { registerNpmCommands } from './commands/npm/index.js';
+import { setOverlayFiles } from './core/config.js';
 import * as output from './core/output.js';
 
 function getVersion(): string {
@@ -33,7 +34,14 @@ export function createProgram(): Command {
     .option('--include-pattern <regex>', 'Include directories matching regex pattern')
     .option('--exclude-pattern <regex>', 'Exclude directories matching regex pattern')
     .option('--parallel', 'Execute commands in parallel')
-    .option('--concurrency <number>', 'Max parallel processes (default: 4)', parseInt);
+    .option('--concurrency <number>', 'Max parallel processes (default: 4)', parseInt)
+    .option('-f, --file <path>', 'Additional config file to merge (repeatable)',
+      (val: string, prev: string[]) => [...prev, val], [] as string[]);
+
+  program.hook('preAction', (thisCommand) => {
+    const opts = thisCommand.optsWithGlobals();
+    setOverlayFiles(opts['file'] ?? []);
+  });
 
   registerInitCommand(program);
   registerExecCommand(program);
