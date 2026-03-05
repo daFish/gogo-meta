@@ -1,3 +1,16 @@
+# [1.5.0](https://github.com/daFish/gogo-meta/compare/v1.4.0...v1.5.0) (2026-03-05)
+
+
+### Bug Fixes
+
+* **project:** pass empty overlay list on write to prevent absorption ([b637bf0](https://github.com/daFish/gogo-meta/commit/b637bf01a67fde0855e65894f918f458490e3cea))
+
+
+### Features
+
+* **cli:** add -f/--file global option for overlay configs ([02ef2ca](https://github.com/daFish/gogo-meta/commit/02ef2ca77e752a1b6df90896c04c6cafed05485d))
+* **config:** add overlay config merging and multi-file support ([d1335c1](https://github.com/daFish/gogo-meta/commit/d1335c14e9d11a400a69e9b1fc1ecfc3a8ae53f3))
+
 # [1.4.0](https://github.com/daFish/gogo-meta/compare/v1.3.0...v1.4.0) (2026-03-03)
 
 
