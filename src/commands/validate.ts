@@ -3,7 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { MetaConfigSchema, LoopRcSchema } from '../types/index.js';
-import { fileExists, detectFormat, LOOPRC_FILE } from '../core/config.js';
+import { detectFormat, LOOPRC_FILE } from '../core/config.js';
 import * as output from '../core/output.js';
 
 interface ValidationResult {
