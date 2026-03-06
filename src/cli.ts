@@ -8,6 +8,7 @@ import { registerRunCommand } from './commands/run.js';
 import { registerGitCommands } from './commands/git/index.js';
 import { registerProjectCommands } from './commands/project/index.js';
 import { registerNpmCommands } from './commands/npm/index.js';
+import { registerValidateCommand } from './commands/validate.js';
 import { setOverlayFiles } from './core/config.js';
 import * as output from './core/output.js';
 
@@ -49,6 +50,7 @@ export function createProgram(): Command {
   registerGitCommands(program);
   registerProjectCommands(program);
   registerNpmCommands(program);
+  registerValidateCommand(program);
 
   return program;
 }
