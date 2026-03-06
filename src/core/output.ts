@@ -53,8 +53,8 @@ export function commandOutput(stdout: string, stderr: string): void {
   }
 }
 
-export function summary(results: { success: number; failed: number; total: number }): void {
-  const { success: successCount, failed, total } = results;
+export function summary(results: { success: number; failed: number; total: number; failedProjects?: string[] }): void {
+  const { success: successCount, failed, total, failedProjects } = results;
 
   console.log('');
   if (failed === 0) {
@@ -63,6 +63,14 @@ export function summary(results: { success: number; failed: number; total: numbe
     console.log(
       `${symbols.warning} ${pc.yellow(`${successCount}/${total} projects succeeded, ${failed} failed`)}`
     );
+
+    if (failedProjects && failedProjects.length > 0) {
+      console.log('');
+      console.log('Failed projects:');
+      for (const project of failedProjects) {
+        console.log(`  ${symbols.error} ${pc.red(project)}`);
+      }
+    }
   }
 }
 

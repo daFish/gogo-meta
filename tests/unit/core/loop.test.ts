@@ -203,6 +203,52 @@ describe('loop', () => {
     });
   });
 
+  describe('summary output', () => {
+    it('passes failed project names to summary', async () => {
+      mockExecute
+        .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error' })
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error' });
+
+      const context = createContext({
+        api: 'url1',
+        web: 'url2',
+        docs: 'url3',
+      });
+
+      const outputMod = await import('../../../src/core/output.js');
+
+      await loop('test', context);
+
+      expect(outputMod.summary).toHaveBeenCalledWith({
+        success: 1,
+        failed: 2,
+        total: 3,
+        failedProjects: ['web', 'docs'],
+      });
+    });
+
+    it('passes empty failedProjects when all succeed', async () => {
+      mockExecute.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+
+      const context = createContext({
+        api: 'url1',
+        web: 'url2',
+      });
+
+      const outputMod = await import('../../../src/core/output.js');
+
+      await loop('test', context);
+
+      expect(outputMod.summary).toHaveBeenCalledWith({
+        success: 2,
+        failed: 0,
+        total: 2,
+        failedProjects: [],
+      });
+    });
+  });
+
   describe('hasFailures', () => {
     it('returns true when any result failed', () => {
       const results = [

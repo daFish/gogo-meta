@@ -108,6 +108,19 @@ describe('output', () => {
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining('2/3'));
       expect(console.log).toHaveBeenCalledWith(expect.stringContaining('1 failed'));
     });
+
+    it('lists failed projects when provided', () => {
+      summary({ success: 1, failed: 2, total: 3, failedProjects: ['api', 'libs/auth'] });
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('api'));
+      expect(console.log).toHaveBeenCalledWith(expect.stringContaining('libs/auth'));
+    });
+
+    it('does not list failed projects when all succeed', () => {
+      const spy = vi.mocked(console.log);
+      summary({ success: 2, failed: 0, total: 2, failedProjects: [] });
+      const calls = spy.mock.calls.map((c) => c[0]);
+      expect(calls.every((c: string) => !c.includes('Failed'))).toBe(true);
+    });
   });
 
   describe('formatDuration', () => {

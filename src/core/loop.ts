@@ -143,9 +143,14 @@ export async function loop(
     : await runSequential(command, directories, context, options);
 
   if (!options.suppressOutput) {
-    const successCount = results.filter((r) => r.success).length;
-    const failedCount = results.length - successCount;
-    output.summary({ success: successCount, failed: failedCount, total: results.length });
+    const failedResults = results.filter((r) => !r.success);
+    const successCount = results.length - failedResults.length;
+    output.summary({
+      success: successCount,
+      failed: failedResults.length,
+      total: results.length,
+      failedProjects: failedResults.map((r) => r.directory),
+    });
   }
 
   return results;
