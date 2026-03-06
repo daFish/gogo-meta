@@ -1,3 +1,11 @@
+# [1.6.0](https://github.com/daFish/gogo-meta/compare/v1.5.0...v1.6.0) (2026-03-06)
+
+
+### Features
+
+* add option to validate configuration files ([53353ea](https://github.com/daFish/gogo-meta/commit/53353ea0b4a02a73722442c782171af032386323))
+* display a list of failed projects after git pull ([02394a0](https://github.com/daFish/gogo-meta/commit/02394a00e1a11274ad981fa827965f148f1dd1eb))
+
 # [1.5.0](https://github.com/daFish/gogo-meta/compare/v1.4.0...v1.5.0) (2026-03-05)
 
 
