@@ -8,7 +8,10 @@ interface CommitOptions {
   excludeOnly?: string;
   includePattern?: string;
   excludePattern?: string;
-  message: string;
+  message?: string;
+  fixup?: string;
+  all?: boolean;
+  amend?: boolean;
 }
 
 export async function commitCommand(options: CommitOptions): Promise<void> {
@@ -22,8 +25,18 @@ export async function commitCommand(options: CommitOptions): Promise<void> {
   const { config } = await readMetaConfig(cwd);
   const filterOptions = createFilterOptions(options);
 
-  const escapedMessage = options.message.replace(/"/g, '\\"');
-  const command = `git commit -m "${escapedMessage}"`;
+  const parts = ['git', 'commit'];
+  if (options.all) parts.push('-a');
+  if (options.amend) {
+    parts.push('--amend', '--no-edit');
+  } else if (options.fixup) {
+    parts.push(`--fixup=${options.fixup}`);
+  } else if (options.message) {
+    const escaped = options.message.replace(/"/g, '\\"');
+    parts.push(`-m "${escaped}"`);
+  }
+
+  const command = parts.join(' ');
 
   output.info('Committing changes across repositories...');
 

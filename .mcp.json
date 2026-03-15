@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gogo-meta": {
+      "command": "node",
+      "args": ["${PROJECT_ROOT}/dist/mcp.js"]
+    }
+  }
+}
