@@ -1,25 +1,11 @@
-# -- Build stage --
-FROM oven/bun:1 AS build
+FROM alpine:3.23.4
 
-WORKDIR /app
+RUN apk -U upgrade --scripts=no apk-tools \
+    && apk add --no-cache ca-certificates tzdata dumb-init \
+    && rm -rf /var/cache/apk/*
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+ENV TZ=UTC
 
-COPY tsup.config.ts tsconfig.json ./
-COPY src/ src/
-RUN bun run build
+COPY gogo /usr/bin/gogo
 
-# -- Production stage --
-FROM node:24-alpine
-
-RUN apk add --no-cache git git-lfs openssh-client
-
-WORKDIR /app
-
-COPY package.json bun.lock ./
-COPY --from=build /app/node_modules/ node_modules/
-COPY --from=build /app/dist/ dist/
-COPY bin/ bin/
-
-ENTRYPOINT ["node", "bin/gogo"]
+ENTRYPOINT ["dumb-init", "--", "gogo"]

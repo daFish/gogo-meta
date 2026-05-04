@@ -1,6 +1,13 @@
 # gogo-meta
 
-A modern TypeScript CLI for managing multi-repository projects. Execute commands across multiple git repositories simultaneously.
+[![Checks](https://github.com/daFish/gogo-meta/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/daFish/gogo-meta/actions/workflows/checks.yml?query=branch%3Amain)
+[![Goreleaser](https://github.com/daFish/gogo-meta/actions/workflows/goreleaser.yml/badge.svg?branch=main)](https://github.com/daFish/gogo-meta/actions/workflows/goreleaser.yml?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/daFish/gogo-meta)](https://github.com/daFish/gogo-meta/releases)
+[![GHCR](https://img.shields.io/badge/ghcr.io-container-blue)](https://github.com/daFish/gogo-meta/pkgs/container/gogo-meta)
+
+A modern Go CLI for managing multi-repository projects. Execute commands across multiple git repositories simultaneously.
+
+Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/6ae349afce42af1081c6c40d64a0affb708ff562) — originally written in TypeScript and now rewritten in Go with identical CLI behavior.
 
 ## Features
 
@@ -15,19 +22,11 @@ A modern TypeScript CLI for managing multi-repository projects. Execute commands
 
 ## Installation
 
-### npm (recommended)
+### Pre-built Binary (recommended)
 
-```bash
-npm install -g @dafish/gogo-meta
-```
+Get the most recent [release from GitHub](https://github.com/daFish/gogo-meta/releases).
 
-Or run without installing:
-
-```bash
-npx @dafish/gogo-meta --help
-```
-
-### Docker
+### Docker (not recommended)
 
 ```bash
 docker pull ghcr.io/dafish/gogo-meta
@@ -54,9 +53,13 @@ alias gogo='docker run -it --rm -v "$PWD":/workspace -v "$HOME/.ssh":/root/.ssh:
 ```bash
 git clone https://github.com/daFish/gogo-meta.git
 cd gogo-meta
-bun install
-bun run build
-bun link
+make build
+```
+
+The binary is built to `dist/gogo`. Add it to your `$PATH` or move it to a directory in your `$PATH`:
+
+```bash
+mv dist/gogo /usr/local/bin/
 ```
 
 ## Quick Start
@@ -163,6 +166,16 @@ Overlay files follow the same format as the primary config (JSON or YAML). When 
 Overlay paths are resolved relative to the directory containing the primary config file.
 
 Write commands (`project create`, `project import`) only modify the primary config file — overlay projects are never absorbed into it.
+
+### .looprc (optional)
+
+Define default ignore patterns for command execution:
+
+```json
+{
+  "ignore": ["docs", "examples"]
+}
+```
 
 ## Commands
 
@@ -555,49 +568,13 @@ gogo npm run lint --if-present
 
 ### `gogo validate`
 
-Validate your configuration. This runs two checks:
-
-1. **Config files** — every `.gogo` / `.gogo.*` file in the current directory
-   is parsed and checked against its schema.
-2. **Working copy** — each project declared in the resolved config must have a
-   matching directory on disk.
-
-If a configured project directory is missing, validation fails with a hint:
-run `gogo migrate` if the project was moved/renamed in the config, or
-`gogo git update` to clone a project that has not been cloned yet.
+Validate all config files in the current directory.
 
 ```bash
 gogo validate
 ```
 
----
-
-### `gogo migrate`
-
-Reconcile the working copy with the configuration. After you re-arrange project
-paths in `.gogo` (rename or move entries while keeping the same repository URL),
-`gogo migrate` finds each repository at its current location and moves it to the
-path declared in the config. Repositories are matched by their `origin` remote
-URL, so renames and moves are detected automatically. Empty parent directories
-left behind by a move are removed.
-
-```bash
-gogo migrate            # Apply the moves
-gogo migrate --dry-run  # Show what would move without changing anything
-```
-
-Behavior:
-
-- **In sync** — a repository already at its configured path is left untouched.
-- **Moved/renamed** — a repository found at a different path is moved to match.
-- **Conflict** — if the target path is occupied by a *different* repository,
-  migration aborts without touching anything.
-- **Missing** — a configured repository that is not present anywhere in the
-  working copy is reported; run `gogo git update` to clone it.
-
-| Option       | Description                                          |
-| ------------ | ---------------------------------------------------- |
-| `--dry-run`  | Show what would be moved without making any changes  |
+Checks `.gogo`, `.gogo.yaml`, `.gogo.yml`, and `.looprc` files for valid syntax and structure.
 
 ---
 
@@ -649,11 +626,49 @@ gogo npm run build --exclude-only docs
 gogo git status --include-pattern "^libs/"
 ```
 
+## Development
+
+### Prerequisites
+
+- Go 1.24 or higher
+- Git
+
+### Build Commands
+
+```bash
+make help           # Show all available targets
+make build          # Build the gogo binary to dist/gogo
+make docker         # Build the gogo container image locally (Dockerfile.local)
+make fmt            # Run go fmt
+make lint           # Run golangci-lint
+make test           # Run all tests
+make test-coverage  # Run tests and generate coverage report (coverage/)
+make clean          # Remove build artifacts (dist/, coverage/)
+make all            # Clean, lint, test-coverage, then build
+```
+
+### Project Structure
+
+```
+./
+├── cmd/gogo/          # Entry point
+├── internal/
+│   ├── cli/           # Cobra command definitions
+│   ├── config/        # Config parsing, merging, validation
+│   ├── executor/      # Shell command execution
+│   ├── filter/        # Include/exclude filtering
+│   ├── loop/          # Multi-repo orchestration
+│   ├── output/        # Terminal formatting
+│   └── ssh/           # SSH host key management
+├── Makefile
+├── .golangci.yml
+└── go.mod
+```
+
 ## Requirements
 
-- **npm install**: Node.js 24 or higher, Git
-- **Docker**: Docker
-- **From source**: Bun 1.x or higher, Git
+- Go 1.24 or higher
+- Git
 
 ## License
 

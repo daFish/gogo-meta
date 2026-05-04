@@ -2,23 +2,36 @@
 
 When a coding task is completed, run the following checks:
 
-1. **Type checking**: `bun run typecheck`
-   - Ensures no TypeScript errors (strict mode with extra flags)
+1. **Format**: `make fmt`
+   - Runs `go fmt ./...`
 
-2. **Linting**: `bun run lint`
-   - ESLint with typescript-eslint recommended rules
+2. **Lint**: `make lint`
+   - Runs `golangci-lint` with the config in `.golangci.yml`
 
-3. **Unit tests**: `bun run test:unit`
-   - Fast feedback, uses memfs for filesystem mocking
+3. **Tests**: `make test`
+   - Full test suite across all packages (`go test ./...`)
 
-4. **Integration tests**: `bun run test:integration`
-   - Verifies command behavior end-to-end
-
-5. **All tests**: `bun run test`
-   - Full test suite (unit + integration + e2e)
+4. **Coverage** (when relevant): `make test-coverage`
+   - Generates coverage profile + HTML report under `coverage/`
 
 ## Quick Check (minimum before committing)
 
 ```bash
-bun run typecheck && bun run lint && bun run test
+make fmt && make lint && make test
 ```
+
+## Full Pipeline
+
+```bash
+make all   # clean → lint → test-coverage → build
+```
+
+## Build Sanity
+
+If a change touches `cmd/gogo` or affects build flags, also run:
+
+```bash
+make build && ./dist/gogo --version
+```
+
+Note: there is no `make vet` target. To run `go vet` directly: `go vet ./...`.

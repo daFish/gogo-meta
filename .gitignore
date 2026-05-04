@@ -1,9 +1,5 @@
-node_modules/
-dist/
-coverage/
-*.log
+dist/*
 .claude/settings.local.json
-.DS_Store
-.env
-.env.*
-!.env.example
+coverage.html
+coverage.out
+coverage/*

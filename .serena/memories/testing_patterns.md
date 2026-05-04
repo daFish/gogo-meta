@@ -2,31 +2,33 @@
 
 ## Framework
 
-- **Vitest 4.x** with globals enabled (`globals: true` in config)
-- Test files: `tests/**/*.test.ts`
-- Global setup: `tests/setup.ts` (restores mocks after each test, resets `process.exitCode`)
+- Standard library `testing` package
+- `github.com/stretchr/testify` (`assert` + `require`) for assertions
+- Test files: `<file>_test.go` colocated with source under `internal/<pkg>/`
 
-## Filesystem Mocking
+## Filesystem Isolation
 
-- Uses **memfs** to mock the filesystem
-- Pattern: `vi.mock('node:fs/promises', async () => { const memfs = await import('memfs'); return memfs.fs.promises; })`
-- Reset volume in `beforeEach`: `vol.reset()`
+- Use `t.TempDir()` for any test that touches disk — automatically cleaned up
+- No memfs / virtual fs layer; tests work against real temp directories
 
 ## Mocking Strategy
 
-- Mock `src/core/executor.ts` to avoid real shell commands
-- Mock `src/core/output.ts` to suppress console output
-- Use `vi.restoreAllMocks()` in afterEach
+- Mock the `executor.Executor` interface to avoid real shell commands in `loop` tests
+- Override `output.Writer` / `output.ErrWriter` in tests to capture or suppress console output
+- Restore overrides via `t.Cleanup` or deferred resets
 
 ## Test Organization
 
-- `tests/unit/core/` — Unit tests for core modules (config, executor, filter, loop, output, ssh)
-- `tests/integration/` — Integration tests (exec, init, run, git, project)
-- `tests/e2e/` — End-to-end tests
+- Unit tests live next to the code they test (`internal/config/config_test.go`, etc.)
+- Integration-style tests verify command behavior end-to-end via the cobra command tree in `internal/cli/`
+- Table-driven tests with subtests (`t.Run(name, ...)`) are preferred
+
+## Concurrency
+
+- Loop/parallel code is tested by exercising the `Executor` interface with controllable mocks
+- Use `context.Context` cancellation paths in tests where relevant
 
 ## Coverage
 
-- Provider: V8
-- Includes: `src/**/*.ts`
-- Excludes: `src/**/*.test.ts`, `src/index.ts`
-- Thresholds: statements 40%, branches 70%, functions 60%, lines 40%
+- `make test-coverage` produces a coverage profile under `coverage/`
+- No enforced thresholds in CI yet

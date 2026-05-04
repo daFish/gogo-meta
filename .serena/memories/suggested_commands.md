@@ -1,48 +1,50 @@
 # Suggested Commands
 
-## Development
+Prefer `make` targets over invoking the underlying tools directly.
 
-| Command         | Description               |
-| --------------- | ------------------------- |
-| `bun install`   | Install dependencies      |
-| `bun run build` | Build to dist/ (via tsup) |
-| `bun run dev`   | Build in watch mode       |
+## Make Targets (full list, see `Makefile`)
 
-## Testing
+| Target               | Description                                                |
+| -------------------- | ---------------------------------------------------------- |
+| `make help`          | Show all available targets (auto-generated from `## ...`)  |
+| `make build`         | Build the `gogo` binary to `dist/gogo` (CGO disabled, `-trimpath`, ldflags inject version) |
+| `make docker`        | Build the gogo container image locally via `Dockerfile.local` (tag `ghcr.io/dafish/gogo-meta:latest`) |
+| `make fmt`           | Run `go fmt ./...`                                         |
+| `make lint`          | Run `golangci-lint run`                                    |
+| `make test`          | Run all tests (`go test ./...`)                            |
+| `make test-coverage` | Run tests with coverage profile + HTML report under `coverage/` |
+| `make clean`         | Remove `dist/` and `coverage/`                             |
+| `make all`           | Clean → lint → test-coverage → build                       |
 
-| Command                    | Description                |
-| -------------------------- | -------------------------- |
-| `bun run test`             | Run all tests (vitest run) |
-| `bun run test:unit`        | Run unit tests only        |
-| `bun run test:integration` | Run integration tests only |
-| `bun run test:e2e`         | Run e2e tests only         |
-| `bun run test:watch`       | Run tests in watch mode    |
-| `bun run test:coverage`    | Run tests with V8 coverage |
+## Module / Dependencies
 
-## Code Quality
+| Command          | Description                              |
+| ---------------- | ---------------------------------------- |
+| `go mod tidy`    | Sync `go.mod` / `go.sum`                 |
+| `go mod download`| Pre-fetch dependencies                   |
 
-| Command             | Description                             |
-| ------------------- | --------------------------------------- |
-| `bun run lint`      | Run ESLint on src and tests             |
-| `bun run typecheck` | TypeScript type checking (tsc --noEmit) |
+## Direct Tooling (when bypassing make is needed)
+
+| Command                | Description                          |
+| ---------------------- | ------------------------------------ |
+| `go test ./...`        | All tests                            |
+| `go test ./internal/loop -run TestX -v` | Single package / single test |
+| `go vet ./...`         | Vet all packages                     |
+| `golangci-lint run`    | Lint directly                        |
 
 ## Release
 
-| Command                   | Description              |
-| ------------------------- | ------------------------ |
-| `bun run release:dry-run` | Dry-run semantic release |
+| Command                                  | Description                  |
+| ---------------------------------------- | ---------------------------- |
+| `goreleaser release --snapshot --clean`  | Local snapshot release build |
 
-## Docker
-
-| Command                                                                                                    | Description                    |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `docker build -t gogo-meta .`                                                                              | Build the Docker image locally |
-| `docker run -it --rm -v "$PWD":/workspace -v "$HOME/.ssh":/root/.ssh:ro -w /workspace gogo-meta <command>` | Run gogo via Docker            |
+(There is no `make` target for goreleaser; release is driven by CI via `.goreleaser.yaml`.)
 
 ## System Utilities (macOS/Darwin)
 
-| Command                    | Description                            |
-| -------------------------- | -------------------------------------- |
-| `git`                      | Version control                        |
-| `ls`, `cd`, `find`, `grep` | Standard unix utilities                |
-| `bun`                      | JavaScript runtime and package manager |
+| Command                    | Description                |
+| -------------------------- | -------------------------- |
+| `git`                      | Version control            |
+| `ls`, `cd`, `find`, `grep` | Standard unix utilities    |
+| `go`                       | Go toolchain               |
+| `golangci-lint`            | Linter (installed locally) |
