@@ -1,27 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:api.github.com)",
-      "Bash(pnpm install)",
-      "Bash(pnpm build:*)",
-      "Bash(pnpm test:unit:*)",
-      "Bash(pnpm test:integration:*)",
-      "Bash(node:*)",
-      "Bash(pnpm test:coverage:*)",
-      "Bash(pnpm add:*)",
+      "Bash(go mod:*)",
+      "Bash(make help:*)",
+      "Bash(make build:*)",
+      "Bash(make docker:*)",
+      "Bash(make fmt:*)",
+      "Bash(make lint:*)",
+      "Bash(make test:*)",
+      "Bash(make test-coverage:*)",
+      "Bash(make clean:*)",
+      "Bash(make all:*)",
       "Bash(tree:*)",
-      "Bash(pnpm typecheck:*)",
       "Bash(gh run view:*)",
-      "Bash(bun run test)",
-      "Bash(bun add:*)",
-      "Bash(bun run lint)",
-      "Bash(bun run test:unit:*)",
-      "Bash(gh run list:*)",
-      "Bash(bun run build:*)",
-      "Bash(bun run typecheck:*)",
-      "Bash(bun run release:dry-run:*)"
+      "Bash(gh run list:*)"
     ]
   }
 }
