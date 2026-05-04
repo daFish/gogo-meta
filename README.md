@@ -1,6 +1,13 @@
 # gogo-meta
 
-A modern TypeScript CLI for managing multi-repository projects. Execute commands across multiple git repositories simultaneously.
+[![Checks](https://github.com/daFish/gogo-meta/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/daFish/gogo-meta/actions/workflows/checks.yml?query=branch%3Amain)
+[![Goreleaser](https://github.com/daFish/gogo-meta/actions/workflows/goreleaser.yml/badge.svg?branch=main)](https://github.com/daFish/gogo-meta/actions/workflows/goreleaser.yml?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/daFish/gogo-meta)](https://github.com/daFish/gogo-meta/releases)
+[![GHCR](https://img.shields.io/badge/ghcr.io-container-blue)](https://github.com/daFish/gogo-meta/pkgs/container/gogo-meta)
+
+A modern Go CLI for managing multi-repository projects. Execute commands across multiple git repositories simultaneously.
+
+Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/6ae349afce42af1081c6c40d64a0affb708ff562) — originally written in TypeScript and now rewritten in Go with identical CLI behavior.
 
 ## Features
 
@@ -15,48 +22,18 @@ A modern TypeScript CLI for managing multi-repository projects. Execute commands
 
 ## Installation
 
-### npm (recommended)
-
-```bash
-npm install -g @dafish/gogo-meta
-```
-
-Or run without installing:
-
-```bash
-npx @dafish/gogo-meta --help
-```
-
-### Docker
-
-```bash
-docker pull ghcr.io/dafish/gogo-meta
-```
-
-When using Docker, mount your working directory and SSH keys so gogo can access your repositories:
-
-```bash
-docker run -it --rm \
-  -v "$PWD":/workspace \
-  -v "$HOME/.ssh":/root/.ssh:ro \
-  -w /workspace \
-  ghcr.io/dafish/gogo-meta <command>
-```
-
-Any `gogo` command shown in this README can be run via Docker by replacing `gogo` with the `docker run` call above. For convenience, you can create a shell alias:
-
-```bash
-alias gogo='docker run -it --rm -v "$PWD":/workspace -v "$HOME/.ssh":/root/.ssh:ro -w /workspace ghcr.io/dafish/gogo-meta'
-```
-
 ### From source
 
 ```bash
 git clone https://github.com/daFish/gogo-meta.git
 cd gogo-meta
-bun install
-bun run build
-bun link
+make build
+```
+
+The binary is built to `dist/gogo`. Add it to your `$PATH` or move it to a directory in your `$PATH`:
+
+```bash
+mv dist/gogo /usr/local/bin/
 ```
 
 ## Quick Start
@@ -563,6 +540,18 @@ gogo npm run lint --if-present
 
 ---
 
+### `gogo validate`
+
+Validate all config files in the current directory.
+
+```bash
+gogo validate
+```
+
+Checks `.gogo`, `.gogo.yaml`, `.gogo.yml`, and `.looprc` files for valid syntax and structure.
+
+---
+
 ## Examples
 
 ### Setting Up a New Meta Repository
@@ -611,11 +600,49 @@ gogo npm run build --exclude-only docs
 gogo git status --include-pattern "^libs/"
 ```
 
+## Development
+
+### Prerequisites
+
+- Go 1.24 or higher
+- Git
+
+### Build Commands
+
+```bash
+make help           # Show all available targets
+make build          # Build the gogo binary to dist/gogo
+make docker         # Build the gogo container image locally (Dockerfile.local)
+make fmt            # Run go fmt
+make lint           # Run golangci-lint
+make test           # Run all tests
+make test-coverage  # Run tests and generate coverage report (coverage/)
+make clean          # Remove build artifacts (dist/, coverage/)
+make all            # Clean, lint, test-coverage, then build
+```
+
+### Project Structure
+
+```
+./
+├── cmd/gogo/          # Entry point
+├── internal/
+│   ├── cli/           # Cobra command definitions
+│   ├── config/        # Config parsing, merging, validation
+│   ├── executor/      # Shell command execution
+│   ├── filter/        # Include/exclude filtering
+│   ├── loop/          # Multi-repo orchestration
+│   ├── output/        # Terminal formatting
+│   └── ssh/           # SSH host key management
+├── Makefile
+├── .golangci.yml
+└── go.mod
+```
+
 ## Requirements
 
-- **npm install**: Node.js 24 or higher, Git
-- **Docker**: Docker
-- **From source**: Bun 1.x or higher, Git
+- Go 1.24 or higher
+- Git
 
 ## License
 

@@ -1,0 +1,42 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gocritic
+    - misspell
+    - gosec
+
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - sprintfQuotedString
+
+    gosec:
+      excludes:
+        - G204 # subprocess launched with variable - expected for CLI tool
+        - G301 # directory permissions 0755 - standard for CLI tools
+        - G302 # OpenFile permissions 0644 - standard for config files
+        - G304 # file inclusion via variable - expected for CLI tool
+        - G306 # WriteFile permissions 0644 - standard for config files
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

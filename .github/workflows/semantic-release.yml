@@ -1,0 +1,56 @@
+name: Semantic Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx \
+            --package=semantic-release@25 \
+            --package=@semantic-release/changelog@6 \
+            --package=@semantic-release/commit-analyzer@13 \
+            --package=@semantic-release/git@10 \
+            --package=@semantic-release/github@12 \
+            --package=@semantic-release/release-notes-generator@14 \
+            -- semantic-release
