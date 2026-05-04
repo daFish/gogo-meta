@@ -1,61 +1,66 @@
 # gogo-meta — Project Overview
 
 ## Purpose
-A modern TypeScript CLI for managing multi-repository projects. Reimplementation of [meta](https://github.com/mateodelnorte/meta).
+A modern Go CLI for managing multi-repository projects. Reimplementation of [meta](https://github.com/mateodelnorte/meta).
 Allows developers to manage multiple git repositories as a unified system by executing commands across all child repositories defined in a `.gogo` configuration file.
 
-Published as `@dafish/gogo-meta` on npm. Binary name: `gogo`.
+Binary name: `gogo`. Module path: `github.com/daFish/gogo-meta`.
 
 ## Tech Stack
-- **Runtime**: Bun 1.x (Node 24 target for build)
-- **Language**: TypeScript 5.x (strict mode, ESM only)
-- **CLI Framework**: Commander.js 14.x
-- **Validation**: Zod 4.x (for runtime validation of external data like config files)
-- **Terminal Styling**: picocolors (not chalk)
-- **Build**: tsup (ESM format, with dts and sourcemaps)
-- **Testing**: Vitest 4.x + memfs (for filesystem mocking)
-- **Linting**: ESLint 9.x + typescript-eslint
-- **Release**: semantic-release
+- **Language**: Go 1.24+
+- **CLI Framework**: spf13/cobra
+- **YAML**: gopkg.in/yaml.v3
+- **Terminal Styling**: fatih/color
+- **Testing**: stdlib `testing` + stretchr/testify
+- **Linting**: golangci-lint v2 (config in `.golangci.yml`)
+- **Build**: Makefile with ldflags version injection
+- **Release**: goreleaser + semantic-release
 
 ## Project Structure
 ```
-src/
-├── cli.ts                     # Entry point, command registration (createProgram, getVersion, main)
-├── index.ts                   # Library exports
-├── commands/
-│   ├── init.ts                # gogo init
-│   ├── exec.ts                # gogo exec
-│   ├── run.ts                 # gogo run (predefined commands)
-│   ├── git/                   # Git subcommands (clone, update, status, pull, push, branch, checkout, commit)
-│   ├── project/               # Project management (create, import)
-│   └── npm/                   # NPM operations (install, link, run)
-├── core/
-│   ├── config.ts              # .gogo file parsing, manipulation (readMetaConfig, writeMetaConfig, addProject, etc.)
-│   ├── executor.ts            # Shell command execution
-│   ├── filter.ts              # Include/exclude filtering logic
-│   ├── loop.ts                # Multi-repo command orchestration
-│   ├── output.ts              # Terminal output formatting
-│   ├── ssh.ts                 # SSH host key verification
-│   └── index.ts               # Core module barrel export
-└── types/
-    └── index.ts               # TypeScript types and Zod schemas (MetaConfig, LoopRc, ExecutorResult, etc.)
+cmd/gogo/
+└── main.go                    # Entry point, version injection via ldflags
 
-tests/
-├── setup.ts                   # Global test setup (restores mocks, resets exitCode)
-├── unit/core/                 # Unit tests for core modules
-├── integration/               # Integration tests (exec, init, run, git, project)
-└── e2e/                       # End-to-end tests
-
-bin/
-└── gogo                       # CLI entry script
+internal/
+├── cli/
+│   ├── root.go                # Root command, persistent flags, overlay preRun
+│   ├── helpers.go             # Shared flag helpers (addFilterFlags, resolveFilterOptions, etc.)
+│   ├── init.go                # gogo init
+│   ├── exec.go                # gogo exec
+│   ├── run.go                 # gogo run
+│   ├── validate.go            # gogo validate
+│   ├── git.go                 # gogo git (parent command)
+│   ├── git_clone.go           # gogo git clone
+│   ├── git_update.go          # gogo git update
+│   ├── git_status.go          # gogo git status
+│   ├── git_pull.go            # gogo git pull
+│   ├── git_push.go            # gogo git push
+│   ├── git_branch.go          # gogo git branch
+│   ├── git_checkout.go        # gogo git checkout
+│   ├── git_commit.go          # gogo git commit
+│   ├── project.go             # gogo project (parent command)
+│   ├── project_create.go      # gogo project create
+│   ├── project_import.go      # gogo project import
+│   ├── npm.go                 # gogo npm (parent command)
+│   ├── npm_install.go         # gogo npm install / ci
+│   ├── npm_link.go            # gogo npm link
+│   └── npm_run.go             # gogo npm run
+├── config/                    # Types, read/write, merge, find-up, validation, overlay, gitignore
+├── executor/                  # Executor interface + shell command execution
+├── filter/                    # Include/exclude + .looprc filtering
+├── loop/                      # Sequential + parallel orchestration
+├── output/                    # Terminal formatting, symbols, summary
+└── ssh/                       # SSH host extraction, known_hosts
 ```
 
+Tests live next to source files in each `internal/<pkg>/` directory (`*_test.go`).
+
 ## Docker
-- Multi-stage Dockerfile: Bun build stage + Node 24 Alpine runtime
-- Runtime image includes git, git-lfs, openssh-client
-- Published to `ghcr.io/dafish/gogo-meta` on release (via `.github/workflows/docker.yml`)
-- Triggered by GitHub release event (created by semantic-release)
+- `Dockerfile` — production image
+- `Dockerfile.local` — local dev image
+- `.goreleaser.yaml` drives release builds and image publishing
 
 ## Configuration Files
-- `.gogo` — Main project config (projects map, ignore patterns, commands)
+- `.gogo` — Main project config; supports JSON (`.gogo`) and YAML (`.gogo.yaml` / `.gogo.yml`). Precedence: `.gogo` > `.gogo.yaml` > `.gogo.yml`.
 - `.looprc` — Optional filtering config (ignore list)
+- Overlay files merged via repeatable `-f, --file` global flag

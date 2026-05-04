@@ -1,6 +1,6 @@
 # gogo-meta
 
-A modern TypeScript CLI for managing multi-repository projects. Reimplementation of [meta](https://github.com/mateodelnorte/meta).
+A modern Go CLI for managing multi-repository projects. Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/6ae349afce42af1081c6c40d64a0affb708ff562), originally written in TypeScript and rewritten in Go from commit `6ae349afce42af1081c6c40d64a0affb708ff562` of the TS codebase.
 
 ## Project Overview
 
@@ -8,46 +8,78 @@ gogo-meta allows developers to manage multiple git repositories as a unified sys
 
 ## Tech Stack
 
-- **Runtime**: Bun 1.x
-- **Language**: TypeScript 5.x (strict mode, ESM)
-- **CLI Framework**: Commander.js
-- **Validation**: Zod 4.x
-- **Terminal Styling**: picocolors
-- **Build**: tsup
-- **Testing**: Vitest 4.x + memfs
+- **Language**: Go 1.24+
+- **CLI Framework**: cobra
+- **YAML**: gopkg.in/yaml.v3
+- **Terminal Styling**: fatih/color
+- **Testing**: testing (stdlib) + testify
+- **Linting**: golangci-lint v2
+- **Build**: Makefile with ldflags version injection
 
 ## Project Structure
 
 ```
-src/
-├── cli.ts                 # Entry point, command registration
-├── commands/
-│   ├── init.ts            # gogo init
-│   ├── exec.ts            # gogo exec
-│   ├── run.ts             # gogo run (predefined commands)
-│   ├── git/               # Git subcommands (clone, update, status, etc.)
-│   ├── project/           # Project management (create, import)
-│   └── npm/               # NPM operations (install, link, run)
-├── core/
-│   ├── config.ts          # .gogo file parsing and manipulation
-│   ├── executor.ts        # Shell command execution
-│   ├── filter.ts          # Include/exclude filtering logic
-│   ├── loop.ts            # Multi-repo command orchestration
-│   └── output.ts          # Terminal output formatting
-└── types/
-    └── index.ts           # TypeScript types and Zod schemas
+cmd/gogo/
+└── main.go                # Entry point, version injection via ldflags
+
+internal/
+├── cli/
+│   ├── root.go            # Root command, persistent flags, overlay preRun
+│   ├── helpers.go         # Shared flag helpers (addFilterFlags, resolveFilterOptions, etc.)
+│   ├── init.go            # gogo init
+│   ├── exec.go            # gogo exec
+│   ├── run.go             # gogo run
+│   ├── validate.go        # gogo validate
+│   ├── git.go             # gogo git (parent command)
+│   ├── git_clone.go       # gogo git clone
+│   ├── git_update.go      # gogo git update
+│   ├── git_status.go      # gogo git status
+│   ├── git_pull.go        # gogo git pull
+│   ├── git_push.go        # gogo git push
+│   ├── git_branch.go      # gogo git branch
+│   ├── git_checkout.go    # gogo git checkout
+│   ├── git_commit.go      # gogo git commit
+│   ├── project.go         # gogo project (parent command)
+│   ├── project_create.go  # gogo project create
+│   ├── project_import.go  # gogo project import
+│   ├── npm.go             # gogo npm (parent command)
+│   ├── npm_install.go     # gogo npm install / ci
+│   ├── npm_link.go        # gogo npm link
+│   └── npm_run.go         # gogo npm run
+├── config/
+│   ├── config.go          # Types, read/write, merge, find-up, validation, overlay
+│   ├── config_test.go
+│   ├── gitignore.go       # addToGitignore helper
+│   └── gitignore_test.go
+├── executor/
+│   ├── executor.go        # Executor interface, shell command execution
+│   └── executor_test.go
+├── filter/
+│   ├── filter.go          # Include/exclude + looprc filtering
+│   └── filter_test.go
+├── loop/
+│   ├── loop.go            # Sequential + parallel orchestration
+│   └── loop_test.go
+├── output/
+│   ├── output.go          # Terminal formatting, symbols, summary
+│   └── output_test.go
+└── ssh/
+    ├── ssh.go             # SSH host extraction, known_hosts
+    └── ssh_test.go
 ```
 
 ## Commands
 
 ```bash
-bun install         # Install dependencies
-bun run build       # Build to dist/
-bun run dev         # Build in watch mode
-bun run test:unit   # Run unit tests
-bun run test:integration  # Run integration tests
-bun run test:coverage  # Run tests with coverage
-bun run typecheck   # Type check without emitting
+make help           # Show all available targets
+make build          # Build the gogo binary to dist/gogo
+make docker         # Build the gogo container image locally (Dockerfile.local)
+make fmt            # Run go fmt
+make lint           # Run golangci-lint
+make test           # Run all tests
+make test-coverage  # Run tests and generate coverage report (coverage/)
+make clean          # Remove build artifacts (dist/, coverage/)
+make all            # Clean, lint, test-coverage, then build
 ```
 
 ## CLI Usage
@@ -69,17 +101,22 @@ gogo -f a.yaml -f b.yaml exec "..."  # Multiple overlays
 
 ## Code Conventions
 
-- Use `node:` prefix for Node.js built-in imports
-- Prefer async/await over callbacks
-- Use Zod for runtime validation of external data
-- Keep functions pure where possible
-- Use picocolors for terminal styling (not chalk)
+- Follow idiomatic Go patterns and standard project layout
+- Use `internal/` for all non-exported packages
+- Use the `Executor` interface for testability (mock in tests, real shell in production)
+- Use `context.Context` for cancellation and timeout propagation
+- Use `sync.WaitGroup` + channels for parallel execution
+- Use `0o755` / `0o644` octal literal style
+- Handle errors explicitly — no ignored return values (enforced by errcheck linter)
+- Use `fatih/color` for terminal styling (not other color libraries)
+- Custom `UnmarshalJSON` / `UnmarshalYAML` on `CommandConfig` to handle the string | object union type
 
 ## Testing Patterns
 
-- Unit tests use memfs to mock filesystem
-- Mock `src/core/executor.ts` to avoid real shell commands
-- Mock `src/core/output.ts` to suppress console output
+- Unit tests use `t.TempDir()` for filesystem isolation
+- Mock `executor.Executor` interface to avoid real shell commands in loop tests
+- Override `output.Writer` / `output.ErrWriter` to suppress and capture console output in tests
+- Table-driven tests with `testify/assert` and `testify/require`
 - Integration tests verify command behavior end-to-end
 
 ## Configuration Files

@@ -1,0 +1,33 @@
+FROM golang:1.26.2-alpine AS build-env
+
+ARG VERSION=dev
+ARG BUILD_DATE=unknown
+ARG GIT_COMMIT=unknown
+
+WORKDIR /src
+
+RUN apk -U upgrade --scripts=no apk-tools \
+    && apk add --no-cache dumb-init
+
+COPY go.* .
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 go build \
+    -ldflags "-s -w -X github.com/daFish/gogo-meta/internal/version.Version=${VERSION} -X github.com/daFish/gogo-meta/internal/version.BuildDate=${BUILD_DATE} -X github.com/daFish/gogo-meta/internal/version.GitCommit=${GIT_COMMIT}" \
+    -trimpath -o gogo ./cmd/gogo
+
+FROM alpine:3.23.4 AS artifact
+
+ENV TZ=UTC
+
+RUN apk -U upgrade --scripts=no apk-tools \
+    && apk add --no-cache ca-certificates tzdata \
+    && rm -rf /var/cache/apk/*
+
+COPY --from=build-env /src/gogo /usr/bin/gogo
+
+COPY --from=build-env /usr/bin/dumb-init /usr/bin/dumb-init
+
+ENTRYPOINT ["dumb-init", "--", "gogo"]
