@@ -582,6 +582,35 @@ gogo validate
 
 ---
 
+### `gogo migrate`
+
+Reconcile the working copy with the configuration. After you re-arrange project
+paths in `.gogo` (rename or move entries while keeping the same repository URL),
+`gogo migrate` finds each repository at its current location and moves it to the
+path declared in the config. Repositories are matched by their `origin` remote
+URL, so renames and moves are detected automatically. Empty parent directories
+left behind by a move are removed.
+
+```bash
+gogo migrate            # Apply the moves
+gogo migrate --dry-run  # Show what would move without changing anything
+```
+
+Behavior:
+
+- **In sync** — a repository already at its configured path is left untouched.
+- **Moved/renamed** — a repository found at a different path is moved to match.
+- **Conflict** — if the target path is occupied by a *different* repository,
+  migration aborts without touching anything.
+- **Missing** — a configured repository that is not present anywhere in the
+  working copy is reported; run `gogo git update` to clone it.
+
+| Option       | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `--dry-run`  | Show what would be moved without making any changes  |
+
+---
+
 ## Examples
 
 ### Setting Up a New Meta Repository
