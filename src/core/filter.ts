@@ -59,18 +59,3 @@ export function createFilterOptions(options: {
     excludePattern: parseFilterPattern(options.excludePattern),
   };
 }
-
-export function filterFromLoopRc(
-  directories: string[],
-  ignore: string[]
-): string[] {
-  if (ignore.length === 0) {
-    return directories;
-  }
-
-  const ignoreSet = new Set(ignore);
-  return directories.filter((dir) => {
-    const dirBasename = basename(dir);
-    return !ignoreSet.has(dir) && !ignoreSet.has(dirBasename);
-  });
-}

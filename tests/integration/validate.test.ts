@@ -71,17 +71,6 @@ describe('validate command', () => {
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo.yml', 'success');
   });
 
-  it('validates a valid .looprc file', async () => {
-    vol.fromJSON({
-      '/project/.looprc': JSON.stringify({ ignore: ['docs'] }),
-    });
-    const output = await import('../../src/core/output.js');
-
-    await validateCommand();
-
-    expect(output.projectStatus).toHaveBeenCalledWith('.looprc', 'success');
-  });
-
   it('reports invalid JSON in .gogo', async () => {
     vol.fromJSON({
       '/project/.gogo': '{not valid json',
@@ -115,44 +104,31 @@ describe('validate command', () => {
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo', 'error', expect.stringContaining('Invalid structure'));
   });
 
-  it('reports invalid JSON in .looprc', async () => {
-    vol.fromJSON({
-      '/project/.looprc': 'not json',
-    });
-    const output = await import('../../src/core/output.js');
-
-    await expect(validateCommand()).rejects.toThrow('Validation failed');
-
-    expect(output.projectStatus).toHaveBeenCalledWith('.looprc', 'error', 'Invalid JSON');
-  });
-
   it('validates multiple files at once', async () => {
     vol.fromJSON({
       '/project/.gogo': JSON.stringify({ projects: {} }),
       '/project/.gogo.yaml': 'projects:\n  lib/bar: git@github.com:org/bar.git\n',
-      '/project/.looprc': JSON.stringify({ ignore: [] }),
     });
     const output = await import('../../src/core/output.js');
 
     await validateCommand();
 
-    expect(output.projectStatus).toHaveBeenCalledTimes(3);
+    expect(output.projectStatus).toHaveBeenCalledTimes(2);
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo', 'success');
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo.yaml', 'success');
-    expect(output.projectStatus).toHaveBeenCalledWith('.looprc', 'success');
   });
 
   it('reports mix of valid and invalid files', async () => {
     vol.fromJSON({
       '/project/.gogo': JSON.stringify({ projects: {} }),
-      '/project/.looprc': 'broken',
+      '/project/.gogo.devops': '{broken',
     });
     const output = await import('../../src/core/output.js');
 
     await expect(validateCommand()).rejects.toThrow('Validation failed');
 
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo', 'success');
-    expect(output.projectStatus).toHaveBeenCalledWith('.looprc', 'error', 'Invalid JSON');
+    expect(output.projectStatus).toHaveBeenCalledWith('.gogo.devops', 'error', 'Invalid JSON');
   });
 
   it('validates overlay config files like .gogo.devops.yaml', async () => {
@@ -182,17 +158,15 @@ describe('validate command', () => {
       '/project/.gogo': JSON.stringify({ projects: {} }),
       '/project/.gogo.devops.yaml': 'projects:\n  infra/cd: git@github.com:org/cd.git\n',
       '/project/.gogo.staging': JSON.stringify({ projects: { 'staging/app': 'git@github.com:org/app.git' } }),
-      '/project/.looprc': JSON.stringify({ ignore: [] }),
     });
     const output = await import('../../src/core/output.js');
 
     await validateCommand();
 
-    expect(output.projectStatus).toHaveBeenCalledTimes(4);
+    expect(output.projectStatus).toHaveBeenCalledTimes(3);
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo', 'success');
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo.devops.yaml', 'success');
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo.staging', 'success');
-    expect(output.projectStatus).toHaveBeenCalledWith('.looprc', 'success');
   });
 
   it('ignores non-config files', async () => {

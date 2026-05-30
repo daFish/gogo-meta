@@ -164,16 +164,6 @@ Overlay paths are resolved relative to the directory containing the primary conf
 
 Write commands (`project create`, `project import`) only modify the primary config file — overlay projects are never absorbed into it.
 
-### .looprc (optional)
-
-Define default ignore patterns for command execution:
-
-```json
-{
-  "ignore": ["docs", "examples"]
-}
-```
-
 ## Commands
 
 ### Global Options
@@ -567,8 +557,8 @@ gogo npm run lint --if-present
 
 Validate your configuration. This runs two checks:
 
-1. **Config files** — every `.gogo` / `.gogo.*` / `.looprc` file in the current
-   directory is parsed and checked against its schema.
+1. **Config files** — every `.gogo` / `.gogo.*` file in the current directory
+   is parsed and checked against its schema.
 2. **Working copy** — each project declared in the resolved config must have a
    matching directory on disk.
 

@@ -4,7 +4,6 @@ import {
   parseFilterList,
   parseFilterPattern,
   createFilterOptions,
-  filterFromLoopRc,
 } from '../../../src/core/filter.js';
 
 describe('filter', () => {
@@ -169,26 +168,6 @@ describe('filter', () => {
       expect(result.excludeOnly).toBeUndefined();
       expect(result.includePattern).toBeUndefined();
       expect(result.excludePattern).toBeUndefined();
-    });
-  });
-
-  describe('filterFromLoopRc', () => {
-    it('removes directories in ignore list', () => {
-      const dirs = ['api', 'web', 'node_modules', '.git'];
-      const result = filterFromLoopRc(dirs, ['node_modules', '.git']);
-      expect(result).toEqual(['api', 'web']);
-    });
-
-    it('returns all directories when ignore list is empty', () => {
-      const dirs = ['api', 'web'];
-      const result = filterFromLoopRc(dirs, []);
-      expect(result).toEqual(dirs);
-    });
-
-    it('matches on basename', () => {
-      const dirs = ['libs/api', 'libs/node_modules'];
-      const result = filterFromLoopRc(dirs, ['node_modules']);
-      expect(result).toEqual(['libs/api']);
     });
   });
 });

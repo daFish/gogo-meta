@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { execute } from './executor.js';
 import { applyFilters } from './filter.js';
-import { getProjectPaths, readLoopRc } from './config.js';
+import { getProjectPaths } from './config.js';
 import * as output from './output.js';
 import type { MetaConfig, LoopOptions, LoopResult, ExecutorResult } from '../types/index.js';
 
@@ -124,12 +124,6 @@ export async function loop(
   options: LoopOptions = {}
 ): Promise<LoopResult[]> {
   let directories = getProjectPaths(context.config);
-
-  const loopRc = await readLoopRc(context.metaDir);
-  if (loopRc?.ignore) {
-    const ignoreSet = new Set(loopRc.ignore);
-    directories = directories.filter((dir) => !ignoreSet.has(dir));
-  }
 
   directories = applyFilters(directories, options);
 

@@ -114,11 +114,3 @@ commands:
     cmd: npm test
     parallel: true
 ```
-
-### .looprc (optional filtering)
-
-```json
-{
-  "ignore": ["docs", "examples"]
-}
-```

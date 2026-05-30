@@ -1,12 +1,11 @@
 import { readFile, writeFile, appendFile, access } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { MetaConfigSchema, LoopRcSchema, type MetaConfig, type LoopRc, type CommandConfig, type ConfigFormat } from '../types/index.js';
+import { MetaConfigSchema, type MetaConfig, type CommandConfig, type ConfigFormat } from '../types/index.js';
 
 export type { ConfigFormat };
 
 export const META_FILE = '.gogo';
-export const LOOPRC_FILE = '.looprc';
 export const META_FILE_CANDIDATES = ['.gogo', '.gogo.yaml', '.gogo.yml'] as const;
 
 export class ConfigError extends Error {
@@ -185,22 +184,6 @@ export async function writeMetaConfig(cwd: string, config: MetaConfig, format: C
   const validated = MetaConfigSchema.parse(config);
   const content = serializeContent(validated, format);
   await writeFile(metaPath, content, 'utf-8');
-}
-
-export async function readLoopRc(cwd: string): Promise<LoopRc | null> {
-  const looprcPath = await findFileUp(LOOPRC_FILE, cwd);
-
-  if (!looprcPath) {
-    return null;
-  }
-
-  try {
-    const content = await readFile(looprcPath, 'utf-8');
-    const parsed = JSON.parse(content);
-    return LoopRcSchema.parse(parsed);
-  } catch {
-    return null;
-  }
 }
 
 export function getMetaDir(cwd: string): Promise<string | null> {

@@ -29,12 +29,6 @@ export const MetaConfigSchema = z.object({
 
 export type MetaConfig = z.infer<typeof MetaConfigSchema>;
 
-export const LoopRcSchema = z.object({
-  ignore: z.array(z.string()).default([]),
-});
-
-export type LoopRc = z.infer<typeof LoopRcSchema>;
-
 export interface FilterOptions {
   includeOnly?: string[] | undefined;
   excludeOnly?: string[] | undefined;

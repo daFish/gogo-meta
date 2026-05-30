@@ -2,8 +2,8 @@ import { Command } from 'commander';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { MetaConfigSchema, LoopRcSchema, type MetaConfig } from '../types/index.js';
-import { detectFormat, readMetaConfig, fileExists, LOOPRC_FILE } from '../core/config.js';
+import { MetaConfigSchema, type MetaConfig } from '../types/index.js';
+import { detectFormat, readMetaConfig, fileExists } from '../core/config.js';
 import * as output from '../core/output.js';
 
 interface ValidationResult {
@@ -29,10 +29,6 @@ export async function findConfigFiles(cwd: string): Promise<string[]> {
     }
   }
 
-  if (entries.includes(LOOPRC_FILE)) {
-    configFiles.push(LOOPRC_FILE);
-  }
-
   return configFiles.sort();
 }
 
@@ -44,11 +40,7 @@ export async function validateCommand(): Promise<void> {
 
   for (const filename of configFiles) {
     const filePath = join(cwd, filename);
-    if (filename === LOOPRC_FILE) {
-      results.push(await validateLoopRcFile(filePath));
-    } else {
-      results.push(await validateConfigFile(filePath, filename));
-    }
+    results.push(await validateConfigFile(filePath, filename));
   }
 
   if (results.length === 0) {
@@ -122,23 +114,6 @@ async function validateConfigFile(filePath: string, filename: string): Promise<V
       return { file: filename, valid: false, error: `Invalid structure: ${error.message}` };
     }
     return { file: filename, valid: false, error: String(error) };
-  }
-}
-
-async function validateLoopRcFile(filePath: string): Promise<ValidationResult> {
-  try {
-    const content = await readFile(filePath, 'utf-8');
-    const parsed = JSON.parse(content);
-    LoopRcSchema.parse(parsed);
-    return { file: LOOPRC_FILE, valid: true };
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      return { file: LOOPRC_FILE, valid: false, error: 'Invalid JSON' };
-    }
-    if (error instanceof Error && error.name === 'ZodError') {
-      return { file: LOOPRC_FILE, valid: false, error: `Invalid structure: ${error.message}` };
-    }
-    return { file: LOOPRC_FILE, valid: false, error: String(error) };
   }
 }
 
