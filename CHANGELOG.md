@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/daFish/gogo-meta/compare/v1.6.0...v1.7.0) (2026-05-30)
+
+
+### Features
+
+* **validate:** check configured projects exist in the working copy ([487786e](https://github.com/daFish/gogo-meta/commit/487786ec7e3608c7a27fd6914c3d0b113ad1a971))
+
 # [1.6.0](https://github.com/daFish/gogo-meta/compare/v1.5.0...v1.6.0) (2026-03-06)
 
 
