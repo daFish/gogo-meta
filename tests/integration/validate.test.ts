@@ -38,6 +38,7 @@ describe('validate command', () => {
   it('validates a valid .gogo JSON file', async () => {
     vol.fromJSON({
       '/project/.gogo': JSON.stringify({ projects: { 'lib/foo': 'git@github.com:org/foo.git' } }),
+      '/project/lib/foo/.git': '',
     });
     const output = await import('../../src/core/output.js');
 
@@ -49,6 +50,7 @@ describe('validate command', () => {
   it('validates a valid .gogo.yaml file', async () => {
     vol.fromJSON({
       '/project/.gogo.yaml': 'projects:\n  lib/foo: git@github.com:org/foo.git\n',
+      '/project/lib/foo/.git': '',
     });
     const output = await import('../../src/core/output.js');
 
@@ -60,6 +62,7 @@ describe('validate command', () => {
   it('validates a valid .gogo.yml file', async () => {
     vol.fromJSON({
       '/project/.gogo.yml': 'projects:\n  lib/foo: git@github.com:org/foo.git\n',
+      '/project/lib/foo/.git': '',
     });
     const output = await import('../../src/core/output.js');
 
@@ -204,5 +207,100 @@ describe('validate command', () => {
 
     expect(output.projectStatus).toHaveBeenCalledTimes(1);
     expect(output.projectStatus).toHaveBeenCalledWith('.gogo', 'success');
+  });
+
+  describe('working copy validation', () => {
+    it('fails when a configured project directory is missing', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({
+          projects: { 'lib/foo': 'git@github.com:org/foo.git' },
+        }),
+      });
+      const output = await import('../../src/core/output.js');
+
+      await expect(validateCommand()).rejects.toThrow('Validation failed');
+
+      expect(output.projectStatus).toHaveBeenCalledWith(
+        'lib/foo',
+        'error',
+        expect.stringContaining('missing')
+      );
+    });
+
+    it('suggests how to fix a missing project directory', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({
+          projects: { 'lib/foo': 'git@github.com:org/foo.git' },
+        }),
+      });
+      const output = await import('../../src/core/output.js');
+
+      await expect(validateCommand()).rejects.toThrow('Validation failed');
+
+      const call = (output.projectStatus as ReturnType<typeof vi.fn>).mock.calls.find(
+        ([dir]) => dir === 'lib/foo'
+      );
+      expect(call?.[2]).toMatch(/gogo migrate/);
+      expect(call?.[2]).toMatch(/gogo git update/);
+    });
+
+    it('passes when all configured project directories exist', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({
+          projects: { 'lib/foo': 'git@github.com:org/foo.git' },
+        }),
+        '/project/lib/foo/.git': '',
+      });
+      const output = await import('../../src/core/output.js');
+
+      await expect(validateCommand()).resolves.toBeUndefined();
+
+      expect(output.projectStatus).not.toHaveBeenCalledWith(
+        'lib/foo',
+        'error',
+        expect.anything()
+      );
+    });
+
+    it('validates the working copy for a .gogo.yaml config', async () => {
+      vol.fromJSON({
+        '/project/.gogo.yaml': 'projects:\n  lib/foo: git@github.com:org/foo.git\n',
+      });
+      const output = await import('../../src/core/output.js');
+
+      await expect(validateCommand()).rejects.toThrow('Validation failed');
+
+      expect(output.projectStatus).toHaveBeenCalledWith(
+        'lib/foo',
+        'error',
+        expect.stringContaining('missing')
+      );
+    });
+
+    it('reports each missing project while keeping present ones quiet', async () => {
+      vol.fromJSON({
+        '/project/.gogo': JSON.stringify({
+          projects: {
+            'lib/present': 'git@github.com:org/present.git',
+            'lib/missing': 'git@github.com:org/missing.git',
+          },
+        }),
+        '/project/lib/present/.git': '',
+      });
+      const output = await import('../../src/core/output.js');
+
+      await expect(validateCommand()).rejects.toThrow('Validation failed');
+
+      expect(output.projectStatus).toHaveBeenCalledWith(
+        'lib/missing',
+        'error',
+        expect.stringContaining('missing')
+      );
+      expect(output.projectStatus).not.toHaveBeenCalledWith(
+        'lib/present',
+        'error',
+        expect.anything()
+      );
+    });
   });
 });

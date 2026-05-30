@@ -2,8 +2,8 @@ import { Command } from 'commander';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { MetaConfigSchema, LoopRcSchema } from '../types/index.js';
-import { detectFormat, LOOPRC_FILE } from '../core/config.js';
+import { MetaConfigSchema, LoopRcSchema, type MetaConfig } from '../types/index.js';
+import { detectFormat, readMetaConfig, fileExists, LOOPRC_FILE } from '../core/config.js';
 import * as output from '../core/output.js';
 
 interface ValidationResult {
@@ -11,6 +11,9 @@ interface ValidationResult {
   valid: boolean;
   error?: string;
 }
+
+const MISSING_DIRECTORY_HINT =
+  "directory missing — run 'gogo migrate' if it moved, or 'gogo git update' to clone";
 
 function isGogoConfigFile(filename: string): boolean {
   return filename === '.gogo' || filename.startsWith('.gogo.');
@@ -63,9 +66,41 @@ export async function validateCommand(): Promise<void> {
     }
   }
 
-  if (hasErrors) {
+  const workingCopyHasErrors = await validateWorkingCopy(cwd);
+
+  if (hasErrors || workingCopyHasErrors) {
     throw new Error('Validation failed');
   }
+}
+
+async function validateWorkingCopy(cwd: string): Promise<boolean> {
+  let config: MetaConfig;
+  let metaDir: string;
+  try {
+    ({ config, metaDir } = await readMetaConfig(cwd));
+  } catch {
+    return false;
+  }
+
+  const projectPaths = Object.keys(config.projects);
+  if (projectPaths.length === 0) {
+    return false;
+  }
+
+  let hasErrors = false;
+  for (const projectPath of projectPaths) {
+    const projectDir = join(metaDir, projectPath);
+    if (!(await fileExists(projectDir))) {
+      output.projectStatus(projectPath, 'error', MISSING_DIRECTORY_HINT);
+      hasErrors = true;
+    }
+  }
+
+  if (!hasErrors) {
+    output.success(`All ${projectPaths.length} project directories present`);
+  }
+
+  return hasErrors;
 }
 
 async function validateConfigFile(filePath: string, filename: string): Promise<ValidationResult> {
@@ -110,7 +145,7 @@ async function validateLoopRcFile(filePath: string): Promise<ValidationResult> {
 export function registerValidateCommand(program: Command): void {
   program
     .command('validate')
-    .description('Validate all config files in the current directory')
+    .description('Validate config files and check that configured projects exist in the working copy')
     .action(async () => {
       await validateCommand();
     });

@@ -563,6 +563,25 @@ gogo npm run lint --if-present
 
 ---
 
+### `gogo validate`
+
+Validate your configuration. This runs two checks:
+
+1. **Config files** — every `.gogo` / `.gogo.*` / `.looprc` file in the current
+   directory is parsed and checked against its schema.
+2. **Working copy** — each project declared in the resolved config must have a
+   matching directory on disk.
+
+If a configured project directory is missing, validation fails with a hint:
+run `gogo migrate` if the project was moved/renamed in the config, or
+`gogo git update` to clone a project that has not been cloned yet.
+
+```bash
+gogo validate
+```
+
+---
+
 ## Examples
 
 ### Setting Up a New Meta Repository
