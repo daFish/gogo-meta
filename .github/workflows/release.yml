@@ -11,40 +11,54 @@ permissions:
 jobs:
   release:
     name: Release
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
       pull-requests: write
       id-token: write
-    runs-on: ubuntu-latest
-    if: github.repository_owner == github.actor || github.event_name == 'push'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
         with:
-          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # Publish to npm only when a Release PR has just been merged.
+      # A release created with GITHUB_TOKEN does not trigger a separate
+      # on:release workflow, so publishing must happen in this same run.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ steps.release.outputs.release_created }}
+
+      - uses: oven-sh/setup-bun@v2
+        if: ${{ steps.release.outputs.release_created }}
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: ${{ steps.release.outputs.release_created }}
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - uses: oven-sh/setup-bun@v2
-
-      - run: bun install --frozen-lockfile
+      - name: Install
+        if: ${{ steps.release.outputs.release_created }}
+        run: bun install --frozen-lockfile
 
       - name: Build
+        if: ${{ steps.release.outputs.release_created }}
         run: bun run build
 
-      - name: Lint
-        run: bun run lint
+      - name: Verify
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          bun run lint
+          bun run typecheck
+          bun run test
 
-      - name: Typecheck
-        run: bun run typecheck
+      # npm OIDC trusted publishing requires npm >= 11.5.1.
+      - name: Ensure npm supports trusted publishing
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm install -g npm@latest
 
-      - name: Test
-        run: bun run test
-
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+      - name: Publish
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm publish --provenance --access public
