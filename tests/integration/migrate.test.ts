@@ -123,6 +123,21 @@ describe('migrate command', () => {
     expect(vol.existsSync('/project/lib')).toBe(true);
   });
 
+  it('updates .gitignore when a repo is moved', async () => {
+    vol.fromJSON({
+      '/project/.gogo': JSON.stringify({ projects: { 'packages/api': 'git@github.com:org/api.git' } }),
+      '/project/.gitignore': 'node_modules\nlib/api\n',
+      '/project/lib/api/.git': '',
+    });
+    withRemotes({ '/project/lib/api': 'git@github.com:org/api.git' });
+
+    await migrateCommand();
+
+    const gitignore = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+    expect(gitignore).not.toMatch(/^lib\/api$/m);
+    expect(gitignore).toMatch(/^packages\/api$/m);
+  });
+
   it('does not move anything in dry-run mode', async () => {
     vol.fromJSON({
       '/project/.gogo': JSON.stringify({ projects: { 'packages/api': 'git@github.com:org/api.git' } }),

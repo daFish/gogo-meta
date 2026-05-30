@@ -2,7 +2,13 @@ import { Command } from 'commander';
 import { mkdir, rename, readdir, rmdir } from 'node:fs/promises';
 import { join, dirname, resolve, sep } from 'node:path';
 import { execute } from '../core/executor.js';
-import { readMetaConfig, getMetaDir, fileExists } from '../core/config.js';
+import {
+  readMetaConfig,
+  getMetaDir,
+  fileExists,
+  addToGitignore,
+  removeFromGitignore,
+} from '../core/config.js';
 import { findGitRepos } from '../core/discover.js';
 import * as output from '../core/output.js';
 
@@ -141,6 +147,8 @@ export async function migrateCommand(options: MigrateOptions = {}): Promise<void
     await mkdir(dirname(targetDir), { recursive: true });
     await rename(join(metaDir, move.from), targetDir);
     await pruneEmptyParents(metaDir, move.from);
+    await removeFromGitignore(metaDir, move.from);
+    await addToGitignore(metaDir, move.to);
     output.projectStatus(move.to, 'success', `moved from ${move.from}`);
   }
 

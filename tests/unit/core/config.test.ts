@@ -12,6 +12,7 @@ import {
   findMetaFileUp,
   fileExists,
   addToGitignore,
+  removeFromGitignore,
   ConfigError,
   normalizeCommand,
   getCommand,
@@ -192,6 +193,46 @@ describe('config', () => {
       const added = await addToGitignore('/project', 'api');
 
       expect(added).toBe(false);
+    });
+  });
+
+  describe('removeFromGitignore', () => {
+    it('removes a matching entry and preserves the rest', async () => {
+      vol.fromJSON({ '/project/.gitignore': 'node_modules\nlib/api\n' });
+
+      const removed = await removeFromGitignore('/project', 'lib/api');
+
+      expect(removed).toBe(true);
+      const content = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(content).toBe('node_modules\n');
+    });
+
+    it('returns false when the entry is absent', async () => {
+      vol.fromJSON({ '/project/.gitignore': 'node_modules\n' });
+
+      const removed = await removeFromGitignore('/project', 'lib/api');
+
+      expect(removed).toBe(false);
+      const content = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(content).toBe('node_modules\n');
+    });
+
+    it('returns false when no .gitignore exists', async () => {
+      vol.fromJSON({ '/project': null });
+
+      const removed = await removeFromGitignore('/project', 'lib/api');
+
+      expect(removed).toBe(false);
+    });
+
+    it('matches entries with surrounding whitespace', async () => {
+      vol.fromJSON({ '/project/.gitignore': 'node_modules\n  lib/api  \n' });
+
+      const removed = await removeFromGitignore('/project', 'lib/api');
+
+      expect(removed).toBe(true);
+      const content = vol.readFileSync('/project/.gitignore', 'utf-8') as string;
+      expect(content).toBe('node_modules\n');
     });
   });
 

@@ -295,3 +295,22 @@ export async function addToGitignore(metaDir: string, entry: string): Promise<bo
 
   return true;
 }
+
+export async function removeFromGitignore(metaDir: string, entry: string): Promise<boolean> {
+  const gitignorePath = join(metaDir, '.gitignore');
+
+  if (!(await fileExists(gitignorePath))) {
+    return false;
+  }
+
+  const content = await readFile(gitignorePath, 'utf-8');
+  const lines = content.split('\n');
+  const filtered = lines.filter((line) => line.trim() !== entry);
+
+  if (filtered.length === lines.length) {
+    return false;
+  }
+
+  await writeFile(gitignorePath, filtered.join('\n'), 'utf-8');
+  return true;
+}
