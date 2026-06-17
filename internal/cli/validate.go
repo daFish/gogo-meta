@@ -15,7 +15,7 @@ import (
 func newValidateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate",
-		Short: "Validate all config files in the current directory",
+		Short: "Validate config files and check that configured projects exist in the working copy",
 		RunE:  runValidate,
 	}
 }
@@ -45,24 +45,22 @@ func runValidate(_ *cobra.Command, _ []string) error {
 	var results []validationResult
 	for _, filename := range configFiles {
 		filePath := filepath.Join(cwd, filename)
-		if filename == config.LoopRcFile {
-			results = append(results, validateLoopRcFile(filePath))
-		} else {
-			results = append(results, validateConfigFile(filePath, filename))
-		}
+		results = append(results, validateConfigFile(filePath, filename))
 	}
 
-	hasErrors := false
+	configHasErrors := false
 	for _, r := range results {
 		if r.valid {
 			output.ProjectStatus(r.file, "success", "")
 		} else {
 			output.ProjectStatus(r.file, "error", r.err)
-			hasErrors = true
+			configHasErrors = true
 		}
 	}
 
-	if hasErrors {
+	workingCopyHasErrors := validateWorkingCopy(cwd)
+
+	if configHasErrors || workingCopyHasErrors {
 		return fmt.Errorf("validation failed")
 	}
 	return nil
@@ -75,24 +73,52 @@ func findConfigFiles(cwd string) ([]string, error) {
 	}
 
 	var configFiles []string
-	hasLoopRc := false
-
 	for _, entry := range entries {
 		name := entry.Name()
 		if name == ".gogo" || strings.HasPrefix(name, ".gogo.") {
 			configFiles = append(configFiles, name)
 		}
-		if name == config.LoopRcFile {
-			hasLoopRc = true
-		}
-	}
-
-	if hasLoopRc {
-		configFiles = append(configFiles, config.LoopRcFile)
 	}
 
 	sort.Strings(configFiles)
 	return configFiles, nil
+}
+
+const missingDirectoryHint = "directory missing — run 'gogo migrate' if it moved, or 'gogo git update' to clone"
+
+// validateWorkingCopy reports whether any configured project directory is
+// missing from the working copy. It prints per-project errors and returns true
+// when at least one directory is missing. If the cwd is not inside a meta repo
+// (or there are no projects), it returns false without output.
+func validateWorkingCopy(cwd string) bool {
+	result, err := config.ReadMetaConfig(cwd, nil)
+	if err != nil {
+		return false
+	}
+
+	projectPaths := make([]string, 0, len(result.Config.Projects))
+	for p := range result.Config.Projects {
+		projectPaths = append(projectPaths, p)
+	}
+	if len(projectPaths) == 0 {
+		return false
+	}
+	sort.Strings(projectPaths)
+
+	hasErrors := false
+	for _, projectPath := range projectPaths {
+		projectDir := filepath.Join(result.MetaDir, projectPath)
+		if !config.FileExists(projectDir) {
+			output.ProjectStatus(projectPath, "error", missingDirectoryHint)
+			hasErrors = true
+		}
+	}
+
+	if !hasErrors {
+		output.Success(fmt.Sprintf("All %d project directories present", len(projectPaths)))
+	}
+
+	return hasErrors
 }
 
 func validateConfigFile(filePath, filename string) validationResult {
@@ -113,22 +139,4 @@ func validateConfigFile(filePath, filename string) validationResult {
 	}
 
 	return validationResult{file: filename, valid: true}
-}
-
-func validateLoopRcFile(filePath string) validationResult {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return validationResult{file: config.LoopRcFile, valid: false, err: err.Error()}
-	}
-
-	rc, err := config.ParseLoopRcContent(content)
-	if err != nil {
-		return validationResult{file: config.LoopRcFile, valid: false, err: fmt.Sprintf("Invalid JSON: %v", err)}
-	}
-
-	if err := config.ValidateLoopRc(*rc); err != nil {
-		return validationResult{file: config.LoopRcFile, valid: false, err: fmt.Sprintf("Invalid structure: %v", err)}
-	}
-
-	return validationResult{file: config.LoopRcFile, valid: true}
 }

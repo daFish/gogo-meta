@@ -70,3 +70,35 @@ func TestAddToGitignore(t *testing.T) {
 		assert.False(t, added)
 	})
 }
+
+func TestRemoveFromGitignore(t *testing.T) {
+	dir := t.TempDir()
+	gi := filepath.Join(dir, ".gitignore")
+	require.NoError(t, os.WriteFile(gi, []byte("node_modules\nlibs/api\ndist\n"), 0o644))
+
+	removed, err := RemoveFromGitignore(dir, "libs/api")
+	require.NoError(t, err)
+	assert.True(t, removed)
+
+	content, err := os.ReadFile(gi)
+	require.NoError(t, err)
+	assert.NotContains(t, string(content), "libs/api")
+	assert.Contains(t, string(content), "node_modules")
+}
+
+func TestRemoveFromGitignoreNoMatch(t *testing.T) {
+	dir := t.TempDir()
+	gi := filepath.Join(dir, ".gitignore")
+	require.NoError(t, os.WriteFile(gi, []byte("node_modules\n"), 0o644))
+
+	removed, err := RemoveFromGitignore(dir, "libs/api")
+	require.NoError(t, err)
+	assert.False(t, removed)
+}
+
+func TestRemoveFromGitignoreNoFile(t *testing.T) {
+	dir := t.TempDir()
+	removed, err := RemoveFromGitignore(dir, "libs/api")
+	require.NoError(t, err)
+	assert.False(t, removed)
+}

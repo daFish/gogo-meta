@@ -1,4 +1,4 @@
-FROM golang:1.26.2-alpine AS build-env
+FROM golang:1.26.4-alpine AS build-env
 
 ARG VERSION=dev
 ARG BUILD_DATE=unknown
@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 go build \
     -ldflags "-s -w -X github.com/daFish/gogo-meta/internal/version.Version=${VERSION} -X github.com/daFish/gogo-meta/internal/version.BuildDate=${BUILD_DATE} -X github.com/daFish/gogo-meta/internal/version.GitCommit=${GIT_COMMIT}" \
     -trimpath -o gogo ./cmd/gogo
 
-FROM alpine:3.23.4 AS artifact
+FROM alpine:3.24.1 AS artifact
 
 ENV TZ=UTC
 

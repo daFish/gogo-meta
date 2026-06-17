@@ -44,12 +44,6 @@ type CommandFn func(ctx context.Context, absoluteDir, projectPath string) (*exec
 func Loop(ctx context.Context, command any, loopCtx Context, opts Options, exec executor.Executor) ([]Result, error) {
 	directories := config.GetProjectPaths(loopCtx.Config)
 
-	// Apply looprc filtering.
-	loopRc, err := config.ReadLoopRc(loopCtx.MetaDir)
-	if err == nil && loopRc != nil && len(loopRc.Ignore) > 0 {
-		directories = filter.FilterFromLoopRc(directories, loopRc.Ignore)
-	}
-
 	// Apply user filters.
 	directories = filter.Apply(directories, opts.Options)
 
@@ -58,6 +52,7 @@ func Loop(ctx context.Context, command any, loopCtx Context, opts Options, exec 
 		return nil, nil
 	}
 
+	var err error
 	var results []Result
 	if opts.Parallel {
 		results, err = runParallel(ctx, command, directories, loopCtx, opts, exec)

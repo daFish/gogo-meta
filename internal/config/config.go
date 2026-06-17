@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	MetaFile   = ".gogo"
-	LoopRcFile = ".looprc"
+	MetaFile = ".gogo"
 )
 
 var MetaFileCandidates = []string{".gogo", ".gogo.yaml", ".gogo.yml"}
@@ -102,11 +101,6 @@ type MetaConfig struct {
 	Projects map[string]string        `json:"projects" yaml:"projects"`
 	Ignore   []string                 `json:"ignore" yaml:"ignore"`
 	Commands map[string]CommandConfig `json:"commands,omitempty" yaml:"commands,omitempty"`
-}
-
-// LoopRc represents the .looprc configuration file.
-type LoopRc struct {
-	Ignore []string `json:"ignore" yaml:"ignore"`
 }
 
 // MetaConfigResult is the result of reading a meta config file.
@@ -212,13 +206,7 @@ func Validate(config MetaConfig) error {
 	return nil
 }
 
-// ValidateLoopRc checks that a LoopRc is valid.
-func ValidateLoopRc(rc LoopRc) error {
-	// LoopRc just has an ignore list, no special validation needed.
-	return nil
-}
-
-func fileExists(path string) bool {
+func FileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
@@ -232,7 +220,7 @@ func FindFileUp(filename, startDir string) (string, error) {
 
 	for {
 		filePath := filepath.Join(currentDir, filename)
-		if fileExists(filePath) {
+		if FileExists(filePath) {
 			return filePath, nil
 		}
 
@@ -254,7 +242,7 @@ func FindMetaFileUp(startDir string) (string, error) {
 	for {
 		for _, candidate := range MetaFileCandidates {
 			filePath := filepath.Join(currentDir, candidate)
-			if fileExists(filePath) {
+			if FileExists(filePath) {
 				return filePath, nil
 			}
 		}
@@ -281,7 +269,7 @@ func GetMetaDir(cwd string) (string, error) {
 
 // ReadOverlayConfig reads and parses an overlay config file.
 func ReadOverlayConfig(filePath string) (*MetaConfig, error) {
-	if !fileExists(filePath) {
+	if !FileExists(filePath) {
 		return nil, &ConfigError{
 			Message: fmt.Sprintf("Overlay config file not found: %s", filePath),
 			Path:    filePath,
@@ -396,31 +384,6 @@ func WriteMetaConfig(dir string, config MetaConfig, format ConfigFormat) error {
 	}
 
 	return os.WriteFile(metaPath, content, 0o644)
-}
-
-// ReadLoopRc reads and parses the .looprc file.
-func ReadLoopRc(cwd string) (*LoopRc, error) {
-	looprcPath, err := FindFileUp(LoopRcFile, cwd)
-	if err != nil {
-		return nil, err
-	}
-	if looprcPath == "" {
-		return nil, nil
-	}
-
-	content, err := os.ReadFile(looprcPath)
-	if err != nil {
-		return nil, nil
-	}
-
-	var rc LoopRc
-	if err := json.Unmarshal(content, &rc); err != nil {
-		return nil, nil
-	}
-	if rc.Ignore == nil {
-		rc.Ignore = []string{}
-	}
-	return &rc, nil
 }
 
 // MergeConfigs merges an overlay config into a base config.
@@ -567,17 +530,4 @@ func ListCommands(config MetaConfig) []CommandEntry {
 // Exported for use by the validate command.
 func ParseConfigContent(content []byte, format ConfigFormat) (*MetaConfig, error) {
 	return parseContent(content, format)
-}
-
-// ParseLoopRcContent parses raw JSON content into a LoopRc.
-// Exported for use by the validate command.
-func ParseLoopRcContent(content []byte) (*LoopRc, error) {
-	var rc LoopRc
-	if err := json.Unmarshal(content, &rc); err != nil {
-		return nil, err
-	}
-	if rc.Ignore == nil {
-		rc.Ignore = []string{}
-	}
-	return &rc, nil
 }

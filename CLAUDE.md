@@ -1,6 +1,6 @@
 # gogo-meta
 
-A modern Go CLI for managing multi-repository projects. Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/6ae349afce42af1081c6c40d64a0affb708ff562), originally written in TypeScript and rewritten in Go from commit `6ae349afce42af1081c6c40d64a0affb708ff562` of the TS codebase.
+A modern Go CLI for managing multi-repository projects. Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a19bfc70995b142f49a51316dbe126e9f8f), originally written in TypeScript and rewritten in Go from commit `44344a19bfc70995b142f49a51316dbe126e9f8f` of the TS codebase.
 
 ## Project Overview
 
@@ -30,6 +30,7 @@ internal/
 │   ├── exec.go            # gogo exec
 │   ├── run.go             # gogo run
 │   ├── validate.go        # gogo validate
+│   ├── migrate.go         # gogo migrate
 │   ├── git.go             # gogo git (parent command)
 │   ├── git_clone.go       # gogo git clone
 │   ├── git_update.go      # gogo git update
@@ -55,7 +56,7 @@ internal/
 │   ├── executor.go        # Executor interface, shell command execution
 │   └── executor_test.go
 ├── filter/
-│   ├── filter.go          # Include/exclude + looprc filtering
+│   ├── filter.go          # Include/exclude filtering
 │   └── filter_test.go
 ├── loop/
 │   ├── loop.go            # Sequential + parallel orchestration
@@ -88,6 +89,8 @@ make all            # Clean, lint, test-coverage, then build
 gogo init                          # Create .gogo file
 gogo exec "<command>" [--parallel] # Run command across repos
 gogo run [name]                    # Run predefined command from .gogo
+gogo validate                      # Validate config file(s)
+gogo migrate [--dry-run]           # Move/rename working-copy dirs to match config
 gogo git clone <url>               # Clone meta + children
 gogo git update                    # Clone missing repos
 gogo git status|pull|push|branch|checkout|commit

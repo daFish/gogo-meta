@@ -7,7 +7,7 @@
 
 A modern Go CLI for managing multi-repository projects. Execute commands across multiple git repositories simultaneously.
 
-Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/6ae349afce42af1081c6c40d64a0affb708ff562) — originally written in TypeScript and now rewritten in Go with identical CLI behavior.
+Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a19bfc70995b142f49a51316dbe126e9f8f) — originally written in TypeScript and now rewritten in Go with identical CLI behavior.
 
 ## Features
 
@@ -166,16 +166,6 @@ Overlay files follow the same format as the primary config (JSON or YAML). When 
 Overlay paths are resolved relative to the directory containing the primary config file.
 
 Write commands (`project create`, `project import`) only modify the primary config file — overlay projects are never absorbed into it.
-
-### .looprc (optional)
-
-Define default ignore patterns for command execution:
-
-```json
-{
-  "ignore": ["docs", "examples"]
-}
-```
 
 ## Commands
 
@@ -574,7 +564,22 @@ Validate all config files in the current directory.
 gogo validate
 ```
 
-Checks `.gogo`, `.gogo.yaml`, `.gogo.yml`, and `.looprc` files for valid syntax and structure.
+Checks `.gogo`, `.gogo.yaml`, and `.gogo.yml` files for valid syntax and structure.
+
+---
+
+### `gogo migrate`
+
+Move/rename working-copy directories to match the configuration.
+
+```bash
+gogo migrate           # Rename directories to match .gogo config paths
+gogo migrate --dry-run # Show what would be moved without making any changes
+```
+
+| Option      | Description                                               |
+| ----------- | --------------------------------------------------------- |
+| `--dry-run` | Show what would be moved without changing anything        |
 
 ---
 

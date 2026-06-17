@@ -120,22 +120,3 @@ func TestCreateFilterOptions(t *testing.T) {
 		assert.Nil(t, opts.ExcludePattern)
 	})
 }
-
-func TestFilterFromLoopRc(t *testing.T) {
-	dirs := []string{"src/app", "src/lib", "docs", "examples"}
-
-	t.Run("filters matching dirs", func(t *testing.T) {
-		result := FilterFromLoopRc(dirs, []string{"docs", "examples"})
-		assert.Equal(t, []string{"src/app", "src/lib"}, result)
-	})
-
-	t.Run("returns all dirs when ignore is empty", func(t *testing.T) {
-		result := FilterFromLoopRc(dirs, []string{})
-		assert.Equal(t, dirs, result)
-	})
-
-	t.Run("matches basename", func(t *testing.T) {
-		result := FilterFromLoopRc(dirs, []string{"app"})
-		assert.Equal(t, []string{"src/lib", "docs", "examples"}, result)
-	})
-}

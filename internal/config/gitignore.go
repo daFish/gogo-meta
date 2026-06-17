@@ -12,7 +12,7 @@ import (
 func AddToGitignore(metaDir, entry string) (bool, error) {
 	gitignorePath := filepath.Join(metaDir, ".gitignore")
 
-	if fileExists(gitignorePath) {
+	if FileExists(gitignorePath) {
 		content, err := os.ReadFile(gitignorePath)
 		if err != nil {
 			return false, err
@@ -44,4 +44,34 @@ func AddToGitignore(metaDir, entry string) (bool, error) {
 	}
 
 	return true, os.WriteFile(gitignorePath, []byte(entry+"\n"), 0o644)
+}
+
+// RemoveFromGitignore removes the line matching entry (after trimming) from the
+// .gitignore in metaDir. Returns true if a line was removed, false if the file
+// is absent or contained no matching line.
+func RemoveFromGitignore(metaDir, entry string) (bool, error) {
+	gitignorePath := filepath.Join(metaDir, ".gitignore")
+
+	if !FileExists(gitignorePath) {
+		return false, nil
+	}
+
+	content, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		return false, err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) != entry {
+			filtered = append(filtered, line)
+		}
+	}
+
+	if len(filtered) == len(lines) {
+		return false, nil
+	}
+
+	return true, os.WriteFile(gitignorePath, []byte(strings.Join(filtered, "\n")), 0o644) // #nosec G703
 }

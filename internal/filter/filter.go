@@ -101,17 +101,6 @@ func CreateFilterOptions(includeOnly, excludeOnly, includePattern, excludePatter
 	}, nil
 }
 
-// FilterFromLoopRc filters directories using a looprc ignore list.
-func FilterFromLoopRc(directories, ignore []string) []string {
-	if len(ignore) == 0 {
-		return directories
-	}
-	ignoreSet := toSet(ignore)
-	return filterDirs(directories, func(dir string) bool {
-		return !ignoreSet[dir] && !ignoreSet[filepath.Base(dir)]
-	})
-}
-
 func toSet(items []string) map[string]bool {
 	s := make(map[string]bool, len(items))
 	for _, item := range items {
