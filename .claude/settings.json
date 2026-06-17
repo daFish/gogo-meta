@@ -13,7 +13,8 @@
       "Bash(make all:*)",
       "Bash(tree:*)",
       "Bash(gh run view:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(./dist/gogo --version)"
     ]
   }
 }
