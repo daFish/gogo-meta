@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/daFish/gogo-meta/internal/loop"
 	"github.com/spf13/cobra"
@@ -23,17 +22,7 @@ func newGitBranchCmd() *cobra.Command {
 }
 
 func runGitBranch(cmd *cobra.Command, args []string) error {
-	metaDir, err := requireMetaDir()
-	if err != nil {
-		return err
-	}
-
-	configResult, err := resolveConfig()
-	if err != nil {
-		return err
-	}
-
-	loopOpts, err := resolveLoopOptions(cmd)
+	opts, err := resolveLoopOptions(cmd)
 	if err != nil {
 		return err
 	}
@@ -42,31 +31,16 @@ func runGitBranch(cmd *cobra.Command, args []string) error {
 	allFlag, _ := cmd.Flags().GetBool("all")
 
 	var command string
-	if len(args) == 0 {
-		if allFlag {
-			command = "git branch -a"
-		} else {
-			command = "git branch"
-		}
-	} else {
-		name := args[0]
-		if deleteFlag {
-			command = fmt.Sprintf("git branch -d %s", name)
-		} else {
-			command = fmt.Sprintf("git branch %s", name)
-		}
+	switch {
+	case len(args) == 0 && allFlag:
+		command = "git branch -a"
+	case len(args) == 0:
+		command = "git branch"
+	case deleteFlag:
+		command = fmt.Sprintf("git branch -d %s", args[0])
+	default:
+		command = fmt.Sprintf("git branch %s", args[0])
 	}
 
-	results, err := loop.Loop(runCtx(), command, loop.Context{
-		Config:  configResult.Config,
-		MetaDir: metaDir,
-	}, loopOpts, newShellExecutor())
-	if err != nil {
-		return err
-	}
-
-	if loop.GetExitCode(results) != 0 {
-		os.Exit(1)
-	}
-	return nil
+	return runLoopCommand(loop.ShellCommand(newShellExecutor(), command), opts)
 }

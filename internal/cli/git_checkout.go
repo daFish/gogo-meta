@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/daFish/gogo-meta/internal/loop"
 	"github.com/spf13/cobra"
@@ -22,40 +21,15 @@ func newGitCheckoutCmd() *cobra.Command {
 }
 
 func runGitCheckout(cmd *cobra.Command, args []string) error {
-	branch := args[0]
-
-	metaDir, err := requireMetaDir()
+	opts, err := resolveLoopOptions(cmd)
 	if err != nil {
 		return err
 	}
 
-	configResult, err := resolveConfig()
-	if err != nil {
-		return err
+	command := fmt.Sprintf("git checkout %s", args[0])
+	if create, _ := cmd.Flags().GetBool("create"); create {
+		command = fmt.Sprintf("git checkout -b %s", args[0])
 	}
 
-	loopOpts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-
-	createFlag, _ := cmd.Flags().GetBool("create")
-
-	command := fmt.Sprintf("git checkout %s", branch)
-	if createFlag {
-		command = fmt.Sprintf("git checkout -b %s", branch)
-	}
-
-	results, err := loop.Loop(runCtx(), command, loop.Context{
-		Config:  configResult.Config,
-		MetaDir: metaDir,
-	}, loopOpts, newShellExecutor())
-	if err != nil {
-		return err
-	}
-
-	if loop.GetExitCode(results) != 0 {
-		os.Exit(1)
-	}
-	return nil
+	return runLoopCommand(loop.ShellCommand(newShellExecutor(), command), opts)
 }

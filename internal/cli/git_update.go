@@ -77,7 +77,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 	for i, m := range missingRepos {
 		urls[i] = m.url
 	}
-	_, failedHosts := ssh.EnsureSSHHostsKnown(urls)
+	_, failedHosts := ssh.EnsureSSHHostsKnown(newShellExecutor(), urls)
 
 	if len(failedHosts) > 0 {
 		output.Warning(fmt.Sprintf("Could not verify SSH host keys for: %s. Clone may fail.", joinStrings(failedHosts)))

@@ -100,3 +100,28 @@ func newShellExecutor() executor.Executor {
 func runCtx() context.Context {
 	return context.Background()
 }
+
+// runLoopCommand resolves config + meta dir and runs command across all
+// projects with opts, exiting non-zero if any project failed. Shared body of
+// the exec/git/npm loop commands.
+func runLoopCommand(command loop.CommandFn, opts loop.Options) error {
+	metaDir, err := requireMetaDir()
+	if err != nil {
+		return err
+	}
+	cfg, err := resolveConfig()
+	if err != nil {
+		return err
+	}
+	results, err := loop.Loop(runCtx(), command, loop.Context{
+		Config:  cfg.Config,
+		MetaDir: metaDir,
+	}, opts)
+	if err != nil {
+		return err
+	}
+	if loop.GetExitCode(results) != 0 {
+		os.Exit(1)
+	}
+	return nil
+}

@@ -23,9 +23,8 @@ type Context struct {
 // Options configures loop behavior.
 type Options struct {
 	filter.Options
-	Parallel       bool
-	Concurrency    int
-	SuppressOutput bool
+	Parallel    bool
+	Concurrency int
 }
 
 // Result holds the outcome of a command execution in a single project.
@@ -39,12 +38,17 @@ type Result struct {
 // CommandFn is a function that executes a command in a given directory.
 type CommandFn func(ctx context.Context, absoluteDir, projectPath string) (*executor.Result, error)
 
-// Loop executes a command across all matching project directories.
-// The command parameter can be a string (shell command) or a CommandFn.
-func Loop(ctx context.Context, command any, loopCtx Context, opts Options, exec executor.Executor) ([]Result, error) {
-	directories := config.GetProjectPaths(loopCtx.Config)
+// ShellCommand adapts a shell command string into a CommandFn that runs it via
+// exec in each project directory.
+func ShellCommand(exec executor.Executor, command string) CommandFn {
+	return func(ctx context.Context, absoluteDir, _ string) (*executor.Result, error) {
+		return exec.Execute(ctx, command, executor.Options{Cwd: absoluteDir})
+	}
+}
 
-	// Apply user filters.
+// Loop executes command across all matching project directories.
+func Loop(ctx context.Context, command CommandFn, loopCtx Context, opts Options) ([]Result, error) {
+	directories := config.GetProjectPaths(loopCtx.Config)
 	directories = filter.Apply(directories, opts.Options)
 
 	if len(directories) == 0 {
@@ -55,58 +59,56 @@ func Loop(ctx context.Context, command any, loopCtx Context, opts Options, exec 
 	var err error
 	var results []Result
 	if opts.Parallel {
-		results, err = runParallel(ctx, command, directories, loopCtx, opts, exec)
+		results, err = runParallel(ctx, command, directories, loopCtx, opts)
 	} else {
-		results, err = runSequential(ctx, command, directories, loopCtx, opts, exec)
+		results, err = runSequential(ctx, command, directories, loopCtx, opts)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	if !opts.SuppressOutput {
-		var failedProjects []string
-		successCount := 0
-		for _, r := range results {
-			if r.Success {
-				successCount++
-			} else {
-				failedProjects = append(failedProjects, r.Directory)
-			}
+	var failedProjects []string
+	successCount := 0
+	for _, r := range results {
+		if r.Success {
+			successCount++
+		} else {
+			failedProjects = append(failedProjects, r.Directory)
 		}
-		output.Summary(output.SummaryData{
-			Success:        successCount,
-			Failed:         len(results) - successCount,
-			Total:          len(results),
-			FailedProjects: failedProjects,
-		})
 	}
+	output.Summary(output.SummaryData{
+		Success:        successCount,
+		Failed:         len(results) - successCount,
+		Total:          len(results),
+		FailedProjects: failedProjects,
+	})
 
 	return results, nil
 }
 
-func runSequential(ctx context.Context, command any, directories []string, loopCtx Context, opts Options, exec executor.Executor) ([]Result, error) {
+func runSequential(ctx context.Context, command CommandFn, directories []string, loopCtx Context, opts Options) ([]Result, error) {
 	var results []Result
 
 	for _, projectPath := range directories {
 		absoluteDir := filepath.Join(loopCtx.MetaDir, projectPath)
 
-		if !opts.SuppressOutput {
-			output.Header(projectPath)
-		}
+		output.Header(projectPath)
 
 		start := time.Now()
 
-		result, err := executeCommand(ctx, command, absoluteDir, projectPath, exec)
+		result, err := command(ctx, absoluteDir, projectPath)
 		if err != nil {
-			return nil, err
+			output.CommandOutput("", err.Error())
+			results = append(results, Result{
+				Directory: projectPath,
+				Result:    executor.Result{ExitCode: 1, Stderr: err.Error()},
+				Success:   false,
+				Duration:  time.Since(start),
+			})
+			continue
 		}
-
 		duration := time.Since(start)
-
-		if !opts.SuppressOutput {
-			output.CommandOutput(result.Stdout, result.Stderr)
-		}
-
+		output.CommandOutput(result.Stdout, result.Stderr)
 		results = append(results, Result{
 			Directory: projectPath,
 			Result:    *result,
@@ -118,7 +120,10 @@ func runSequential(ctx context.Context, command any, directories []string, loopC
 	return results, nil
 }
 
-func runParallel(ctx context.Context, command any, directories []string, loopCtx Context, opts Options, exec executor.Executor) ([]Result, error) {
+func runParallel(ctx context.Context, command CommandFn, directories []string, loopCtx Context, opts Options) ([]Result, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	concurrency := opts.Concurrency
 	if concurrency <= 0 {
 		concurrency = DefaultConcurrency
@@ -126,7 +131,6 @@ func runParallel(ctx context.Context, command any, directories []string, loopCtx
 
 	results := make([]Result, len(directories))
 	work := make(chan int, len(directories))
-
 	for i := range directories {
 		work <- i
 	}
@@ -138,9 +142,6 @@ func runParallel(ctx context.Context, command any, directories []string, loopCtx
 	}
 
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var firstErr error
-
 	for w := 0; w < workers; w++ {
 		wg.Add(1)
 		go func() {
@@ -150,16 +151,18 @@ func runParallel(ctx context.Context, command any, directories []string, loopCtx
 				absoluteDir := filepath.Join(loopCtx.MetaDir, projectPath)
 
 				start := time.Now()
-				result, err := executeCommand(ctx, command, absoluteDir, projectPath, exec)
+				result, err := command(ctx, absoluteDir, projectPath)
 				duration := time.Since(start)
 
 				if err != nil {
-					mu.Lock()
-					if firstErr == nil {
-						firstErr = err
+					cancel()
+					results[idx] = Result{
+						Directory: projectPath,
+						Result:    executor.Result{ExitCode: 1, Stderr: err.Error()},
+						Success:   false,
+						Duration:  duration,
 					}
-					mu.Unlock()
-					return
+					continue
 				}
 
 				results[idx] = Result{
@@ -174,30 +177,12 @@ func runParallel(ctx context.Context, command any, directories []string, loopCtx
 
 	wg.Wait()
 
-	if firstErr != nil {
-		return nil, firstErr
-	}
-
-	// Print output in original order.
-	if !opts.SuppressOutput {
-		for _, r := range results {
-			output.Header(r.Directory)
-			output.CommandOutput(r.Result.Stdout, r.Result.Stderr)
-		}
+	for _, r := range results {
+		output.Header(r.Directory)
+		output.CommandOutput(r.Result.Stdout, r.Result.Stderr)
 	}
 
 	return results, nil
-}
-
-func executeCommand(ctx context.Context, command any, absoluteDir, projectPath string, exec executor.Executor) (*executor.Result, error) {
-	switch cmd := command.(type) {
-	case string:
-		return exec.Execute(ctx, cmd, executor.Options{Cwd: absoluteDir})
-	case CommandFn:
-		return cmd(ctx, absoluteDir, projectPath)
-	default:
-		panic("loop: command must be a string or CommandFn")
-	}
 }
 
 // HasFailures returns true if any result has a non-zero exit code.

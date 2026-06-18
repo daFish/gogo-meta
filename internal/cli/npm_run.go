@@ -29,53 +29,27 @@ func newNpmRunCmd() *cobra.Command {
 func runNpmRun(cmd *cobra.Command, args []string) error {
 	script := args[0]
 
-	metaDir, err := requireMetaDir()
+	opts, err := resolveLoopOptions(cmd)
 	if err != nil {
 		return err
 	}
-
-	configResult, err := resolveConfig()
-	if err != nil {
-		return err
-	}
-
-	loopOpts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-
-	ifPresent, _ := cmd.Flags().GetBool("if-present")
 
 	output.Info(fmt.Sprintf("Running \"npm run %s\" across repositories...", script))
 
-	var command any
-	if ifPresent {
-		exec := executor.NewShellExecutor()
-		command = loop.CommandFn(func(ctx context.Context, absoluteDir, _ string) (*executor.Result, error) {
+	exec := newShellExecutor()
+	var command loop.CommandFn
+	if ifPresent, _ := cmd.Flags().GetBool("if-present"); ifPresent {
+		command = func(ctx context.Context, absoluteDir, _ string) (*executor.Result, error) {
 			if !hasNpmScript(absoluteDir, script) {
-				return &executor.Result{
-					ExitCode: 0,
-					Stdout:   fmt.Sprintf("Script %q not found, skipping", script),
-				}, nil
+				return &executor.Result{ExitCode: 0, Stdout: fmt.Sprintf("Script %q not found, skipping", script)}, nil
 			}
 			return exec.Execute(ctx, fmt.Sprintf("npm run %s", script), executor.Options{Cwd: absoluteDir})
-		})
+		}
 	} else {
-		command = fmt.Sprintf("npm run %s", script)
+		command = loop.ShellCommand(exec, fmt.Sprintf("npm run %s", script))
 	}
 
-	results, err := loop.Loop(runCtx(), command, loop.Context{
-		Config:  configResult.Config,
-		MetaDir: metaDir,
-	}, loopOpts, newShellExecutor())
-	if err != nil {
-		return err
-	}
-
-	if loop.GetExitCode(results) != 0 {
-		os.Exit(1)
-	}
-	return nil
+	return runLoopCommand(command, opts)
 }
 
 func hasNpmScript(dir, scriptName string) bool {

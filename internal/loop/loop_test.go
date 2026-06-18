@@ -3,6 +3,7 @@ package loop
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -59,7 +60,7 @@ func TestLoopSequential(t *testing.T) {
 
 	mock := newMockExecutor(map[string]*executor.Result{})
 
-	results, err := Loop(context.Background(), "echo test", Context{Config: cfg, MetaDir: dir}, Options{}, mock)
+	results, err := Loop(context.Background(), ShellCommand(mock, "echo test"), Context{Config: cfg, MetaDir: dir}, Options{})
 	require.NoError(t, err)
 	assert.Len(t, results, 2)
 	assert.True(t, results[0].Success)
@@ -79,7 +80,7 @@ func TestLoopParallel(t *testing.T) {
 
 	mock := newMockExecutor(map[string]*executor.Result{})
 
-	results, err := Loop(context.Background(), "echo test", Context{Config: cfg, MetaDir: dir}, Options{Parallel: true, Concurrency: 2}, mock)
+	results, err := Loop(context.Background(), ShellCommand(mock, "echo test"), Context{Config: cfg, MetaDir: dir}, Options{Parallel: true, Concurrency: 2})
 	require.NoError(t, err)
 	assert.Len(t, results, 3)
 	// Results should be in original sorted order (a, b, c).
@@ -103,7 +104,7 @@ func TestLoopWithFailures(t *testing.T) {
 	// We need the full path since the executor receives absolute paths.
 	mock.results[dir+"/web"] = &executor.Result{ExitCode: 1, Stdout: "", Stderr: "error"}
 
-	results, err := Loop(context.Background(), "test", Context{Config: cfg, MetaDir: dir}, Options{}, mock)
+	results, err := Loop(context.Background(), ShellCommand(mock, "test"), Context{Config: cfg, MetaDir: dir}, Options{})
 	require.NoError(t, err)
 	assert.True(t, HasFailures(results))
 	assert.Equal(t, 1, GetExitCode(results))
@@ -121,9 +122,9 @@ func TestLoopWithFilter(t *testing.T) {
 
 	mock := newMockExecutor(map[string]*executor.Result{})
 
-	results, err := Loop(context.Background(), "echo test", Context{Config: cfg, MetaDir: dir}, Options{
+	results, err := Loop(context.Background(), ShellCommand(mock, "echo test"), Context{Config: cfg, MetaDir: dir}, Options{
 		Options: filterOpts("api,web"),
-	}, mock)
+	})
 	require.NoError(t, err)
 	assert.Len(t, results, 2)
 }
@@ -140,9 +141,9 @@ func TestLoopNoMatch(t *testing.T) {
 
 	mock := newMockExecutor(map[string]*executor.Result{})
 
-	results, err := Loop(context.Background(), "echo test", Context{Config: cfg, MetaDir: dir}, Options{
+	results, err := Loop(context.Background(), ShellCommand(mock, "echo test"), Context{Config: cfg, MetaDir: dir}, Options{
 		Options: filterOpts("nonexistent"),
-	}, mock)
+	})
 	require.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -157,13 +158,11 @@ func TestLoopCommandFn(t *testing.T) {
 		Ignore:   []string{},
 	}
 
-	mock := newMockExecutor(map[string]*executor.Result{})
-
 	fn := CommandFn(func(_ context.Context, absoluteDir, projectPath string) (*executor.Result, error) {
 		return &executor.Result{ExitCode: 0, Stdout: "custom:" + projectPath}, nil
 	})
 
-	results, err := Loop(context.Background(), fn, Context{Config: cfg, MetaDir: dir}, Options{}, mock)
+	results, err := Loop(context.Background(), fn, Context{Config: cfg, MetaDir: dir}, Options{})
 	require.NoError(t, err)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "custom:api", results[0].Result.Stdout)
@@ -185,7 +184,94 @@ func TestGetExitCode(t *testing.T) {
 	assert.Equal(t, 1, GetExitCode([]Result{{Success: false}}))
 }
 
+func TestShellCommandRunsViaExecutor(t *testing.T) {
+	mock := newMockExecutor(map[string]*executor.Result{
+		"/tmp": {ExitCode: 0, Stdout: "hi"},
+	})
+	fn := ShellCommand(mock, "echo hi")
+	res, err := fn(context.Background(), "/tmp", "proj")
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode)
+	assert.Equal(t, "hi", res.Stdout)
+}
+
 func filterOpts(includeOnly string) filter.Options {
 	opts, _ := filter.CreateFilterOptions(includeOnly, "", "", "")
 	return opts
+}
+
+func TestParallelKeepsResultsWhenOneErrors(t *testing.T) {
+	var buf bytes.Buffer
+	origW, origE := output.Writer, output.ErrWriter
+	output.Writer, output.ErrWriter = &buf, &buf
+	defer func() { output.Writer, output.ErrWriter = origW, origE }()
+
+	cfg := config.MetaConfig{Projects: map[string]string{
+		"a": "urlA", "b": "urlB", "c": "urlC",
+	}}
+
+	command := CommandFn(func(_ context.Context, _, projectPath string) (*executor.Result, error) {
+		if projectPath == "b" {
+			return nil, errors.New("boom")
+		}
+		return &executor.Result{ExitCode: 0}, nil
+	})
+
+	results, err := Loop(context.Background(), command,
+		Context{Config: cfg, MetaDir: t.TempDir()},
+		Options{Parallel: true})
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	byDir := map[string]Result{}
+	for _, r := range results {
+		byDir[r.Directory] = r
+	}
+	assert.True(t, byDir["a"].Success)
+	assert.True(t, byDir["c"].Success)
+
+	// Assert that a result with Directory=="b" exists.
+	require.Contains(t, byDir, "b")
+	// Assert the failure shape is recorded correctly.
+	assert.False(t, byDir["b"].Success, "the erroring project is marked failed, not discarded")
+	assert.Equal(t, 1, byDir["b"].Result.ExitCode)
+	assert.Equal(t, "boom", byDir["b"].Result.Stderr)
+}
+
+func TestSequentialKeepsResultsWhenOneErrors(t *testing.T) {
+	var buf bytes.Buffer
+	origW, origE := output.Writer, output.ErrWriter
+	output.Writer, output.ErrWriter = &buf, &buf
+	defer func() { output.Writer, output.ErrWriter = origW, origE }()
+
+	cfg := config.MetaConfig{Projects: map[string]string{
+		"a": "urlA", "b": "urlB", "c": "urlC",
+	}}
+
+	command := CommandFn(func(_ context.Context, _, projectPath string) (*executor.Result, error) {
+		if projectPath == "b" {
+			return nil, errors.New("boom")
+		}
+		return &executor.Result{ExitCode: 0}, nil
+	})
+
+	results, err := Loop(context.Background(), command,
+		Context{Config: cfg, MetaDir: t.TempDir()},
+		Options{})
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	byDir := map[string]Result{}
+	for _, r := range results {
+		byDir[r.Directory] = r
+	}
+	assert.True(t, byDir["a"].Success)
+	assert.True(t, byDir["c"].Success)
+
+	// Assert that a result with Directory=="b" exists.
+	require.Contains(t, byDir, "b")
+	// Assert the failure shape is recorded correctly.
+	assert.False(t, byDir["b"].Success, "the erroring project is marked failed, not discarded")
+	assert.Equal(t, 1, byDir["b"].Result.ExitCode)
+	assert.Equal(t, "boom", byDir["b"].Result.Stderr)
 }
