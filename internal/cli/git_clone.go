@@ -53,7 +53,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("directory %q already exists", repoName)
 	}
 
-	ssh.EnsureSSHHostsKnown([]string{url})
+	ssh.EnsureSSHHostsKnown(newShellExecutor(), []string{url})
 
 	output.Info(fmt.Sprintf("Cloning meta repository: %s", url))
 
@@ -95,7 +95,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 	for _, u := range projects {
 		urls = append(urls, u)
 	}
-	_, failedHosts := ssh.EnsureSSHHostsKnown(urls)
+	_, failedHosts := ssh.EnsureSSHHostsKnown(newShellExecutor(), urls)
 
 	if len(failedHosts) > 0 {
 		output.Warning(fmt.Sprintf("Could not verify SSH host keys for: %s. Clone may fail.", joinStrings(failedHosts)))

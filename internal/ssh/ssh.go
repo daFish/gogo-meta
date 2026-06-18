@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -78,7 +79,7 @@ func IsHostKnown(host string) bool {
 }
 
 // AddHostKey adds a host's SSH key to known_hosts using ssh-keyscan.
-func AddHostKey(host string) bool {
+func AddHostKey(exec executor.Executor, host string) bool {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
@@ -87,21 +88,21 @@ func AddHostKey(host string) bool {
 	knownHostsPath := filepath.Join(home, ".ssh", "known_hosts")
 	command := `ssh-keyscan -H "` + host + `" >> "` + knownHostsPath + `" 2>/dev/null`
 
-	result := executor.ExecuteSync(command, executor.Options{
-		Cwd: ".",
-	})
-
+	result, err := exec.Execute(context.Background(), command, executor.Options{Cwd: "."})
+	if err != nil {
+		return false
+	}
 	return result.ExitCode == 0
 }
 
 // EnsureSSHHostsKnown ensures all SSH hosts for the given URLs are in known_hosts.
-func EnsureSSHHostsKnown(urls []string) (added, failed []string) {
+func EnsureSSHHostsKnown(exec executor.Executor, urls []string) (added, failed []string) {
 	hosts := ExtractUniqueSSHHosts(urls)
 
 	for _, host := range hosts {
 		if !IsHostKnown(host) {
 			output.Info("Adding SSH host key for " + host + "...")
-			if AddHostKey(host) {
+			if AddHostKey(exec, host) {
 				output.Success("Added host key for " + host)
 				added = append(added, host)
 			} else {

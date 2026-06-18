@@ -1,10 +1,32 @@
 package ssh
 
 import (
+	"context"
 	"testing"
 
+	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/stretchr/testify/assert"
 )
+
+type stubExecutor struct {
+	exitCode int
+	gotCmd   string
+}
+
+func (s *stubExecutor) Execute(_ context.Context, command string, _ executor.Options) (*executor.Result, error) {
+	s.gotCmd = command
+	return &executor.Result{ExitCode: s.exitCode}, nil
+}
+
+func TestAddHostKeyUsesExecutor(t *testing.T) {
+	ok := &stubExecutor{exitCode: 0}
+	assert.True(t, AddHostKey(ok, "example.com"))
+	assert.Contains(t, ok.gotCmd, "ssh-keyscan")
+	assert.Contains(t, ok.gotCmd, "example.com")
+
+	bad := &stubExecutor{exitCode: 1}
+	assert.False(t, AddHostKey(bad, "example.com"))
+}
 
 func TestExtractSSHHost(t *testing.T) {
 	tests := []struct {
