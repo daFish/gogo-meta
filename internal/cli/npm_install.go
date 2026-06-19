@@ -22,7 +22,7 @@ func runNpmInstall(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), "npm install"), opts)
+	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "npm", "install"), opts)
 }
 
 func newNpmCiCmd() *cobra.Command {
@@ -41,5 +41,5 @@ func runNpmCi(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), "npm ci"), opts)
+	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "npm", "ci"), opts)
 }

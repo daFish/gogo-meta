@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/daFish/gogo-meta/internal/loop"
 	"github.com/spf13/cobra"
 )
@@ -30,17 +28,17 @@ func runGitBranch(cmd *cobra.Command, args []string) error {
 	deleteFlag, _ := cmd.Flags().GetBool("delete")
 	allFlag, _ := cmd.Flags().GetBool("all")
 
-	var command string
+	var gitArgs []string
 	switch {
 	case len(args) == 0 && allFlag:
-		command = "git branch -a"
+		gitArgs = []string{"branch", "-a"}
 	case len(args) == 0:
-		command = "git branch"
+		gitArgs = []string{"branch"}
 	case deleteFlag:
-		command = fmt.Sprintf("git branch -d %s", args[0])
+		gitArgs = []string{"branch", "-d", args[0]}
 	default:
-		command = fmt.Sprintf("git branch %s", args[0])
+		gitArgs = []string{"branch", args[0]}
 	}
 
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), command), opts)
+	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", gitArgs...), opts)
 }

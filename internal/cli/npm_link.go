@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -81,7 +80,7 @@ func runNpmLink(cmd *cobra.Command, _ []string) error {
 	linkCount := 0
 
 	exec := executor.NewShellExecutor()
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	if allFlag {
 		for consumerName, consumer := range projectPackages {
@@ -122,7 +121,7 @@ func runNpmLink(cmd *cobra.Command, _ []string) error {
 	} else {
 		for pkgName, info := range projectPackages {
 			output.Info(fmt.Sprintf("Creating global link for %s...", pkgName))
-			result, err := exec.Execute(ctx, "npm link", executor.Options{Cwd: info.path})
+			result, err := exec.ExecuteArgs(ctx, "npm", []string{"link"}, executor.Options{Cwd: info.path})
 			if err != nil {
 				output.ProjectStatus(pkgName, "error", err.Error())
 				continue

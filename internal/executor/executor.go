@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -26,12 +27,14 @@ type Result struct {
 	TimedOut bool
 }
 
-// Executor is the interface for running shell commands.
+// Executor runs commands. Execute uses /bin/sh -c (for user shell commands);
+// ExecuteArgs runs an argv directly with no shell (for built-in commands).
 type Executor interface {
 	Execute(ctx context.Context, command string, opts Options) (*Result, error)
+	ExecuteArgs(ctx context.Context, name string, args []string, opts Options) (*Result, error)
 }
 
-// ShellExecutor executes commands via /bin/sh.
+// ShellExecutor executes commands via /bin/sh or directly.
 type ShellExecutor struct{}
 
 // NewShellExecutor creates a new ShellExecutor.
@@ -39,8 +42,19 @@ func NewShellExecutor() *ShellExecutor {
 	return &ShellExecutor{}
 }
 
-// Execute runs a shell command asynchronously with timeout and process group management.
+// Execute runs a command string via /bin/sh -c. Use only where running an
+// arbitrary shell command is the contract (gogo exec / run).
 func (e *ShellExecutor) Execute(ctx context.Context, command string, opts Options) (*Result, error) {
+	return e.run(ctx, "/bin/sh", []string{"-c", command}, opts)
+}
+
+// ExecuteArgs runs name with args directly — no shell, so args cannot be
+// interpreted as shell syntax.
+func (e *ShellExecutor) ExecuteArgs(ctx context.Context, name string, args []string, opts Options) (*Result, error) {
+	return e.run(ctx, name, args, opts)
+}
+
+func (e *ShellExecutor) run(ctx context.Context, name string, args []string, opts Options) (*Result, error) {
 	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = DefaultTimeout
@@ -49,14 +63,25 @@ func (e *ShellExecutor) Execute(ctx context.Context, command string, opts Option
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", command)
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = opts.Cwd
 	if len(opts.Env) > 0 {
 		cmd.Env = opts.Env
 	}
 
-	// Set process group for clean cleanup on Unix.
+	// Run each command in its own process group and, on context cancellation
+	// (Ctrl-C or timeout), kill the whole group so no children are orphaned.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			return err
+		}
+		return nil
+	}
+	cmd.WaitDelay = 2 * time.Second
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -68,15 +93,13 @@ func (e *ShellExecutor) Execute(ctx context.Context, command string, opts Option
 
 	exitCode := 0
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
-		} else if timedOut {
-			exitCode = 124
 		} else {
 			exitCode = 1
 		}
 	}
-
 	if timedOut {
 		exitCode = 124
 	}

@@ -30,5 +30,5 @@ func runExec(cmd *cobra.Command, args []string) error {
 
 	output.Info(fmt.Sprintf("Executing: %s", output.Bold(command)))
 
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), command), opts)
+	return runLoopCommand(cmd.Context(), loop.ShellCommand(newShellExecutor(), command), opts)
 }

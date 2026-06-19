@@ -46,6 +46,14 @@ func ShellCommand(exec executor.Executor, command string) CommandFn {
 	}
 }
 
+// ArgsCommand adapts an argv invocation into a CommandFn run via exec with no
+// shell, so arguments cannot be interpreted as shell syntax.
+func ArgsCommand(exec executor.Executor, name string, args ...string) CommandFn {
+	return func(ctx context.Context, absoluteDir, _ string) (*executor.Result, error) {
+		return exec.ExecuteArgs(ctx, name, args, executor.Options{Cwd: absoluteDir})
+	}
+}
+
 // Loop executes command across all matching project directories.
 func Loop(ctx context.Context, command CommandFn, loopCtx Context, opts Options) ([]Result, error) {
 	directories := config.GetProjectPaths(loopCtx.Config)

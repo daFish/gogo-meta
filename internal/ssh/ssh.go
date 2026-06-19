@@ -78,31 +78,40 @@ func IsHostKnown(host string) bool {
 	return false
 }
 
-// AddHostKey adds a host's SSH key to known_hosts using ssh-keyscan.
-func AddHostKey(exec executor.Executor, host string) bool {
+// AddHostKey scans host's SSH key with ssh-keyscan (argv, no shell) and appends
+// it to known_hosts. Returns true if a key was obtained and written.
+func AddHostKey(ctx context.Context, exec executor.Executor, host string) bool {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
 	}
-
 	knownHostsPath := filepath.Join(home, ".ssh", "known_hosts")
-	command := `ssh-keyscan -H "` + host + `" >> "` + knownHostsPath + `" 2>/dev/null`
 
-	result, err := exec.Execute(context.Background(), command, executor.Options{Cwd: "."})
+	result, err := exec.ExecuteArgs(ctx, "ssh-keyscan", []string{"-H", host}, executor.Options{})
+	if err != nil || result.ExitCode != 0 || result.Stdout == "" {
+		return false
+	}
+
+	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return false
 	}
-	return result.ExitCode == 0
+	defer func() { _ = f.Close() }()
+
+	if _, err := f.WriteString(result.Stdout + "\n"); err != nil {
+		return false
+	}
+	return true
 }
 
 // EnsureSSHHostsKnown ensures all SSH hosts for the given URLs are in known_hosts.
-func EnsureSSHHostsKnown(exec executor.Executor, urls []string) (added, failed []string) {
+func EnsureSSHHostsKnown(ctx context.Context, exec executor.Executor, urls []string) (added, failed []string) {
 	hosts := ExtractUniqueSSHHosts(urls)
 
 	for _, host := range hosts {
 		if !IsHostKnown(host) {
 			output.Info("Adding SSH host key for " + host + "...")
-			if AddHostKey(exec, host) {
+			if AddHostKey(ctx, exec, host) {
 				output.Success("Added host key for " + host)
 				added = append(added, host)
 			} else {

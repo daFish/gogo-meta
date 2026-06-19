@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -77,7 +76,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 	for i, m := range missingRepos {
 		urls[i] = m.url
 	}
-	_, failedHosts := ssh.EnsureSSHHostsKnown(newShellExecutor(), urls)
+	_, failedHosts := ssh.EnsureSSHHostsKnown(cmd.Context(), newShellExecutor(), urls)
 
 	if len(failedHosts) > 0 {
 		output.Warning(fmt.Sprintf("Could not verify SSH host keys for: %s. Clone may fail.", joinStrings(failedHosts)))
@@ -86,7 +85,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 	output.Info(fmt.Sprintf("Cloning %d missing repositories...", len(missingRepos)))
 
 	exec := executor.NewShellExecutor()
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	successCount := 0
 	failCount := 0
@@ -101,7 +100,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 			continue
 		}
 
-		result, err := exec.Execute(ctx, fmt.Sprintf(`git clone "%s" "%s"`, m.url, filepath.Base(m.path)), executor.Options{Cwd: parentDir})
+		result, err := exec.ExecuteArgs(ctx, "git", []string{"clone", m.url, filepath.Base(m.path)}, executor.Options{Cwd: parentDir})
 		if err != nil {
 			output.ProjectStatus(m.path, "error", err.Error())
 			failCount++

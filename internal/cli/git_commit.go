@@ -1,9 +1,6 @@
 package cli
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/daFish/gogo-meta/internal/loop"
 	"github.com/spf13/cobra"
 )
@@ -30,8 +27,5 @@ func runGitCommit(cmd *cobra.Command, _ []string) error {
 	}
 	opts.Parallel = false // git commit is always sequential
 
-	escapedMessage := strings.ReplaceAll(message, `"`, `\"`)
-	command := fmt.Sprintf(`git commit -m "%s"`, escapedMessage)
-
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), command), opts)
+	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", "commit", "-m", message), opts)
 }

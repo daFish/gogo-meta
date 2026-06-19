@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/daFish/gogo-meta/internal/loop"
 	"github.com/spf13/cobra"
 )
@@ -26,10 +24,10 @@ func runGitCheckout(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	command := fmt.Sprintf("git checkout %s", args[0])
+	gitArgs := []string{"checkout", args[0]}
 	if create, _ := cmd.Flags().GetBool("create"); create {
-		command = fmt.Sprintf("git checkout -b %s", args[0])
+		gitArgs = []string{"checkout", "-b", args[0]}
 	}
 
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), command), opts)
+	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", gitArgs...), opts)
 }

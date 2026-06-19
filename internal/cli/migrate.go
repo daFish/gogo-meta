@@ -32,12 +32,12 @@ func newMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Move/rename working-copy directories to match the configuration",
-		RunE: func(_ *cobra.Command, _ []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-			code, err := runMigrate(executor.NewShellExecutor(), cwd, dryRun)
+			code, err := runMigrate(cmd.Context(), executor.NewShellExecutor(), cwd, dryRun)
 			if err != nil {
 				return err
 			}
@@ -51,15 +51,15 @@ func newMigrateCmd() *cobra.Command {
 	return cmd
 }
 
-func getRemoteURL(ex executor.Executor, dir string) string {
-	res, err := ex.Execute(context.Background(), "git remote get-url origin", executor.Options{Cwd: dir})
+func getRemoteURL(ctx context.Context, ex executor.Executor, dir string) string {
+	res, err := ex.ExecuteArgs(ctx, "git", []string{"remote", "get-url", "origin"}, executor.Options{Cwd: dir})
 	if err != nil || res.ExitCode != 0 {
 		return ""
 	}
 	return strings.TrimSpace(res.Stdout)
 }
 
-func mapURLsToCurrentPaths(ex executor.Executor, metaDir string, ignore []string) (urlToPath map[string]string, ambiguous map[string]bool, err error) {
+func mapURLsToCurrentPaths(ctx context.Context, ex executor.Executor, metaDir string, ignore []string) (urlToPath map[string]string, ambiguous map[string]bool, err error) {
 	var repoPaths []string
 	repoPaths, err = discover.FindGitRepos(metaDir, ignore)
 	if err != nil {
@@ -68,7 +68,7 @@ func mapURLsToCurrentPaths(ex executor.Executor, metaDir string, ignore []string
 	urlToPath = map[string]string{}
 	ambiguous = map[string]bool{}
 	for _, rp := range repoPaths {
-		url := getRemoteURL(ex, filepath.Join(metaDir, rp))
+		url := getRemoteURL(ctx, ex, filepath.Join(metaDir, rp))
 		if url == "" {
 			continue
 		}
@@ -105,7 +105,7 @@ func pruneEmptyParents(metaDir, movedFrom string) {
 	}
 }
 
-func runMigrate(ex executor.Executor, cwd string, dryRun bool) (int, error) {
+func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bool) (int, error) {
 	metaDir, err := config.GetMetaDir(cwd)
 	if err != nil {
 		return 0, err
@@ -125,7 +125,7 @@ func runMigrate(ex executor.Executor, cwd string, dryRun bool) (int, error) {
 		return 0, nil
 	}
 
-	urlToPath, ambiguousURLs, err := mapURLsToCurrentPaths(ex, metaDir, cfg.Ignore)
+	urlToPath, ambiguousURLs, err := mapURLsToCurrentPaths(ctx, ex, metaDir, cfg.Ignore)
 	if err != nil {
 		return 0, err
 	}
@@ -145,7 +145,7 @@ func runMigrate(ex executor.Executor, cwd string, dryRun bool) (int, error) {
 		targetDir := filepath.Join(metaDir, projectPath)
 
 		if config.FileExists(targetDir) {
-			targetRemote := getRemoteURL(ex, targetDir)
+			targetRemote := getRemoteURL(ctx, ex, targetDir)
 			if targetRemote != url {
 				conflicts = append(conflicts, migrateConflict{path: projectPath, found: targetRemote})
 			}

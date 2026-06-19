@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,14 +52,14 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("directory %q already exists", repoName)
 	}
 
-	ssh.EnsureSSHHostsKnown(newShellExecutor(), []string{url})
+	ssh.EnsureSSHHostsKnown(cmd.Context(), newShellExecutor(), []string{url})
 
 	output.Info(fmt.Sprintf("Cloning meta repository: %s", url))
 
 	exec := executor.NewShellExecutor()
-	ctx := context.Background()
+	ctx := cmd.Context()
 
-	cloneResult, err := exec.Execute(ctx, fmt.Sprintf(`git clone "%s" "%s"`, url, repoName), executor.Options{Cwd: cwd})
+	cloneResult, err := exec.ExecuteArgs(ctx, "git", []string{"clone", url, repoName}, executor.Options{Cwd: cwd})
 	if err != nil {
 		return err
 	}
@@ -95,7 +94,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 	for _, u := range projects {
 		urls = append(urls, u)
 	}
-	_, failedHosts := ssh.EnsureSSHHostsKnown(newShellExecutor(), urls)
+	_, failedHosts := ssh.EnsureSSHHostsKnown(cmd.Context(), newShellExecutor(), urls)
 
 	if len(failedHosts) > 0 {
 		output.Warning(fmt.Sprintf("Could not verify SSH host keys for: %s. Clone may fail.", joinStrings(failedHosts)))
@@ -122,7 +121,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		result, err := exec.Execute(ctx, fmt.Sprintf(`git clone "%s" "%s"`, projectURL, filepath.Base(projectPath)), executor.Options{Cwd: parentDir})
+		result, err := exec.ExecuteArgs(ctx, "git", []string{"clone", projectURL, filepath.Base(projectPath)}, executor.Options{Cwd: parentDir})
 		if err != nil {
 			output.ProjectStatus(projectPath, "error", err.Error())
 			failCount++

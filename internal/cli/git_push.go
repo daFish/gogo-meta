@@ -21,5 +21,5 @@ func runGitPush(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), "git push"), opts)
+	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", "push"), opts)
 }

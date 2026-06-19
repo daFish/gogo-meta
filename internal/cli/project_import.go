@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,12 +38,12 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 	noClone, _ := cmd.Flags().GetBool("no-clone")
 
 	exec := executor.NewShellExecutor()
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	if _, err := os.Stat(projectDir); err == nil {
 		// Project directory exists.
 		existingURL := ""
-		result, err := exec.Execute(ctx, "git remote get-url origin", executor.Options{Cwd: projectDir})
+		result, err := exec.ExecuteArgs(ctx, "git", []string{"remote", "get-url", "origin"}, executor.Options{Cwd: projectDir})
 		if err == nil && result.ExitCode == 0 && result.Stdout != "" {
 			existingURL = result.Stdout
 		}
@@ -107,7 +106,7 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		cloneResult, err := exec.Execute(ctx, fmt.Sprintf(`git clone "%s" "%s"`, url, filepath.Base(folder)), executor.Options{Cwd: parentDir})
+		cloneResult, err := exec.ExecuteArgs(ctx, "git", []string{"clone", url, filepath.Base(folder)}, executor.Options{Cwd: parentDir})
 		if err != nil {
 			return err
 		}

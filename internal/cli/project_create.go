@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +20,7 @@ func newProjectCreateCmd() *cobra.Command {
 	}
 }
 
-func runProjectCreate(_ *cobra.Command, args []string) error {
+func runProjectCreate(cmd *cobra.Command, args []string) error {
 	folder := args[0]
 	url := args[1]
 
@@ -42,9 +41,9 @@ func runProjectCreate(_ *cobra.Command, args []string) error {
 	}
 
 	exec := executor.NewShellExecutor()
-	ctx := context.Background()
+	ctx := cmd.Context()
 
-	initResult, err := exec.Execute(ctx, "git init", executor.Options{Cwd: projectDir})
+	initResult, err := exec.ExecuteArgs(ctx, "git", []string{"init"}, executor.Options{Cwd: projectDir})
 	if err != nil {
 		return err
 	}
@@ -52,7 +51,7 @@ func runProjectCreate(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize git repository: %s", initResult.Stderr)
 	}
 
-	remoteResult, err := exec.Execute(ctx, fmt.Sprintf(`git remote add origin "%s"`, url), executor.Options{Cwd: projectDir})
+	remoteResult, err := exec.ExecuteArgs(ctx, "git", []string{"remote", "add", "origin", url}, executor.Options{Cwd: projectDir})
 	if err != nil {
 		return err
 	}

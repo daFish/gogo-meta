@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/daFish/gogo-meta/internal/executor"
@@ -22,6 +23,10 @@ func (f *fakeExecutor) Execute(_ context.Context, _ string, opts executor.Option
 		return &executor.Result{ExitCode: 1, Stderr: "no such remote"}, nil
 	}
 	return &executor.Result{ExitCode: 0, Stdout: url + "\n"}, nil
+}
+
+func (f *fakeExecutor) ExecuteArgs(ctx context.Context, name string, args []string, opts executor.Options) (*executor.Result, error) {
+	return f.Execute(ctx, strings.TrimSpace(name+" "+strings.Join(args, " ")), opts)
 }
 
 func writeGogo(t *testing.T, dir, body string) {
@@ -48,7 +53,7 @@ func captureOutput(t *testing.T) *bytes.Buffer {
 func TestMigrateNotARepo(t *testing.T) {
 	dir := t.TempDir()
 	_ = captureOutput(t)
-	_, err := runMigrate(&fakeExecutor{}, dir, false)
+	_, err := runMigrate(context.Background(), &fakeExecutor{}, dir, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Not in a gogo-meta repository")
 }
@@ -58,7 +63,7 @@ func TestMigrateAlreadyInSync(t *testing.T) {
 	writeGogo(t, dir, `{"projects":{"api":"git@x:org/api.git"}}`)
 	abs := mkGitRepo(t, dir, "api")
 	buf := captureOutput(t)
-	code, err := runMigrate(&fakeExecutor{remotes: map[string]string{abs: "git@x:org/api.git"}}, dir, false)
+	code, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{abs: "git@x:org/api.git"}}, dir, false)
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
 	assert.Contains(t, buf.String(), "already matches")
@@ -70,7 +75,7 @@ func TestMigrateMovesRepo(t *testing.T) {
 	writeGogo(t, dir, `{"projects":{"packages/api":"git@x:org/api.git"}}`)
 	from := mkGitRepo(t, dir, "lib/api")
 	buf := captureOutput(t)
-	code, err := runMigrate(&fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, false)
+	code, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, false)
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
 	assert.DirExists(t, filepath.Join(dir, "packages", "api", ".git"))
@@ -83,7 +88,7 @@ func TestMigratePrunesEmptyParent(t *testing.T) {
 	writeGogo(t, dir, `{"projects":{"packages/api":"git@x:org/api.git"}}`)
 	from := mkGitRepo(t, dir, "lib/api")
 	_ = captureOutput(t)
-	_, err := runMigrate(&fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, false)
+	_, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, false)
 	require.NoError(t, err)
 	assert.NoDirExists(t, filepath.Join(dir, "lib"))
 }
@@ -94,7 +99,7 @@ func TestMigrateKeepsNonEmptyParent(t *testing.T) {
 	from := mkGitRepo(t, dir, "lib/api")
 	other := mkGitRepo(t, dir, "lib/web")
 	_ = captureOutput(t)
-	_, err := runMigrate(&fakeExecutor{remotes: map[string]string{
+	_, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{
 		from:  "git@x:org/api.git",
 		other: "git@x:org/web.git",
 	}}, dir, false)
@@ -110,7 +115,7 @@ func TestMigrateUpdatesGitignore(t *testing.T) {
 	from := mkGitRepo(t, dir, "lib/api")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("lib/api\n"), 0o644))
 	_ = captureOutput(t)
-	_, err := runMigrate(&fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, false)
+	_, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, false)
 	require.NoError(t, err)
 	gi, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	assert.NotContains(t, string(gi), "lib/api")
@@ -122,7 +127,7 @@ func TestMigrateDryRun(t *testing.T) {
 	writeGogo(t, dir, `{"projects":{"packages/api":"git@x:org/api.git"}}`)
 	from := mkGitRepo(t, dir, "lib/api")
 	buf := captureOutput(t)
-	code, err := runMigrate(&fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, true)
+	code, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, true)
 	require.NoError(t, err)
 	assert.Equal(t, 0, code)
 	assert.DirExists(t, filepath.Join(dir, "lib", "api"))
@@ -135,7 +140,7 @@ func TestMigrateConflictAborts(t *testing.T) {
 	writeGogo(t, dir, `{"projects":{"api":"git@x:org/api.git"}}`)
 	target := mkGitRepo(t, dir, "api")
 	buf := captureOutput(t)
-	_, err := runMigrate(&fakeExecutor{remotes: map[string]string{target: "git@x:org/OTHER.git"}}, dir, false)
+	_, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{target: "git@x:org/OTHER.git"}}, dir, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Migration aborted")
 	assert.Contains(t, buf.String(), "occupied")
@@ -145,7 +150,7 @@ func TestMigrateMissingExitsNonZero(t *testing.T) {
 	dir := t.TempDir()
 	writeGogo(t, dir, `{"projects":{"api":"git@x:org/api.git"}}`)
 	buf := captureOutput(t)
-	code, err := runMigrate(&fakeExecutor{}, dir, false)
+	code, err := runMigrate(context.Background(), &fakeExecutor{}, dir, false)
 	require.NoError(t, err)
 	assert.Equal(t, 1, code)
 	assert.Contains(t, buf.String(), "gogo git update")

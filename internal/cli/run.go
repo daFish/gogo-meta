@@ -96,7 +96,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 	metaDir, _ := requireMetaDir()
 	output.Info(fmt.Sprintf("Running %q: %s", name, output.Bold(commandDef.Cmd)))
 
-	results, err := loop.Loop(runCtx(), loop.ShellCommand(newShellExecutor(), commandDef.Cmd), loop.Context{
+	results, err := loop.Loop(cmd.Context(), loop.ShellCommand(newShellExecutor(), commandDef.Cmd), loop.Context{
 		Config:  configResult.Config,
 		MetaDir: metaDir,
 	}, loopOpts)

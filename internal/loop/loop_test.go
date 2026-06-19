@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -30,6 +31,10 @@ func (m *mockExecutor) Execute(_ context.Context, command string, opts executor.
 		return result, nil
 	}
 	return &executor.Result{ExitCode: 0, Stdout: "ok"}, nil
+}
+
+func (m *mockExecutor) ExecuteArgs(ctx context.Context, name string, args []string, opts executor.Options) (*executor.Result, error) {
+	return m.Execute(ctx, strings.TrimSpace(name+" "+strings.Join(args, " ")), opts)
 }
 
 func newMockExecutor(results map[string]*executor.Result) *mockExecutor {
@@ -193,6 +198,17 @@ func TestShellCommandRunsViaExecutor(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode)
 	assert.Equal(t, "hi", res.Stdout)
+}
+
+func TestArgsCommandRunsViaExecutor(t *testing.T) {
+	mock := newMockExecutor(map[string]*executor.Result{
+		"/tmp": {ExitCode: 0, Stdout: "ok"},
+	})
+	fn := ArgsCommand(mock, "git", "status", "--short")
+	res, err := fn(context.Background(), "/tmp", "proj")
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode)
+	assert.Equal(t, "ok", res.Stdout)
 }
 
 func filterOpts(includeOnly string) filter.Options {

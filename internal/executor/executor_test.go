@@ -2,6 +2,8 @@ package executor
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -66,4 +68,25 @@ func TestShellExecutor_Execute(t *testing.T) {
 		assert.True(t, result.TimedOut)
 		assert.Equal(t, 124, result.ExitCode)
 	})
+}
+
+func TestExecuteArgsTreatsArgsLiterally(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "pwned")
+	e := NewShellExecutor()
+
+	// If args were passed through a shell, $(...) / ; would execute and create marker.
+	res, err := e.ExecuteArgs(context.Background(), "echo", []string{"$(touch " + marker + ")", "; touch " + marker}, Options{Cwd: dir})
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode)
+	_, statErr := os.Stat(marker)
+	assert.True(t, os.IsNotExist(statErr), "args must be literal, not shell-evaluated")
+	assert.Contains(t, res.Stdout, "$(touch") // echoed verbatim
+}
+
+func TestExecuteArgsCapturesExit(t *testing.T) {
+	e := NewShellExecutor()
+	res, err := e.ExecuteArgs(context.Background(), "false", nil, Options{Cwd: t.TempDir()})
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.ExitCode)
 }

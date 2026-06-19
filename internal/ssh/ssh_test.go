@@ -2,30 +2,64 @@ package ssh
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type stubExecutor struct {
 	exitCode int
 	gotCmd   string
+	stdout   string
 }
 
 func (s *stubExecutor) Execute(_ context.Context, command string, _ executor.Options) (*executor.Result, error) {
 	s.gotCmd = command
-	return &executor.Result{ExitCode: s.exitCode}, nil
+	return &executor.Result{ExitCode: s.exitCode, Stdout: s.stdout}, nil
+}
+
+func (s *stubExecutor) ExecuteArgs(ctx context.Context, name string, args []string, opts executor.Options) (*executor.Result, error) {
+	return s.Execute(ctx, strings.TrimSpace(name+" "+strings.Join(args, " ")), opts)
 }
 
 func TestAddHostKeyUsesExecutor(t *testing.T) {
-	ok := &stubExecutor{exitCode: 0}
-	assert.True(t, AddHostKey(ok, "example.com"))
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
+
+	ok := &stubExecutor{exitCode: 0, stdout: "example.com ssh-rsa AAAAKEY"}
+	assert.True(t, AddHostKey(context.Background(), ok, "example.com"))
 	assert.Contains(t, ok.gotCmd, "ssh-keyscan")
 	assert.Contains(t, ok.gotCmd, "example.com")
 
 	bad := &stubExecutor{exitCode: 1}
-	assert.False(t, AddHostKey(bad, "example.com"))
+	assert.False(t, AddHostKey(context.Background(), bad, "example.com"))
+}
+
+func TestAddHostKeyAppendsScannedKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
+
+	stub := &stubExecutor{exitCode: 0, stdout: "example.com ssh-rsa AAAAKEY"}
+	ok := AddHostKey(context.Background(), stub, "example.com")
+	require.True(t, ok)
+
+	content, err := os.ReadFile(filepath.Join(home, ".ssh", "known_hosts"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "example.com ssh-rsa AAAAKEY")
+}
+
+func TestAddHostKeyFailsOnNonZero(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	stub := &stubExecutor{exitCode: 1}
+	assert.False(t, AddHostKey(context.Background(), stub, "example.com"))
 }
 
 func TestExtractSSHHost(t *testing.T) {

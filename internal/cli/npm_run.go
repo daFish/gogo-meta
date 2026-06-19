@@ -43,13 +43,13 @@ func runNpmRun(cmd *cobra.Command, args []string) error {
 			if !hasNpmScript(absoluteDir, script) {
 				return &executor.Result{ExitCode: 0, Stdout: fmt.Sprintf("Script %q not found, skipping", script)}, nil
 			}
-			return exec.Execute(ctx, fmt.Sprintf("npm run %s", script), executor.Options{Cwd: absoluteDir})
+			return exec.ExecuteArgs(ctx, "npm", []string{"run", script}, executor.Options{Cwd: absoluteDir})
 		}
 	} else {
-		command = loop.ShellCommand(exec, fmt.Sprintf("npm run %s", script))
+		command = loop.ArgsCommand(exec, "npm", "run", script)
 	}
 
-	return runLoopCommand(command, opts)
+	return runLoopCommand(cmd.Context(), command, opts)
 }
 
 func hasNpmScript(dir, scriptName string) bool {

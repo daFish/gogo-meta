@@ -21,5 +21,5 @@ func runGitStatus(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return runLoopCommand(loop.ShellCommand(newShellExecutor(), "git status --short --branch"), opts)
+	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", "status", "--short", "--branch"), opts)
 }
