@@ -29,6 +29,10 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 		url = args[1]
 	}
 
+	if !config.IsSafeProjectPath(folder) {
+		return fmt.Errorf("invalid project folder %q: must be relative and stay within the repository", folder)
+	}
+
 	metaDir, err := requireMetaDir()
 	if err != nil {
 		return err

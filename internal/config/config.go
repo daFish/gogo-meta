@@ -190,10 +190,26 @@ func applyDefaults(config *MetaConfig) {
 	}
 }
 
+// IsSafeProjectPath reports whether p is a safe, repository-relative project
+// path: non-empty, not "." or "..", not absolute, and not escaping the
+// repository via a leading "..".
+func IsSafeProjectPath(p string) bool {
+	c := filepath.Clean(p)
+	if c == "" || c == "." || c == ".." || filepath.IsAbs(c) {
+		return false
+	}
+	return !strings.HasPrefix(c, ".."+string(filepath.Separator))
+}
+
 // Validate checks that a MetaConfig is valid.
 func Validate(config MetaConfig) error {
 	if config.Projects == nil {
 		return errors.New("projects is required")
+	}
+	for path := range config.Projects {
+		if !IsSafeProjectPath(path) {
+			return fmt.Errorf("invalid project path %q: must be relative and stay within the repository", path)
+		}
 	}
 	for name, cmd := range config.Commands {
 		if cmd.Cmd == "" {

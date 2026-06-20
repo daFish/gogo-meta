@@ -7,7 +7,7 @@
 
 A modern Go CLI for managing multi-repository projects. Execute commands across multiple git repositories simultaneously.
 
-Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a19bfc70995b142f49a51316dbe126e9f8f) — originally written in TypeScript and now rewritten in Go with identical CLI behavior.
+Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a19bfc70995b142f49a51316dbe126e9f8f) — originally written in TypeScript and now rewritten in Go with near-identical CLI behavior (see [Differences from the TypeScript version](#differences-from-the-typescript-version)).
 
 ## Features
 
@@ -19,6 +19,25 @@ Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a1
 - Symlink projects for local development
 - JSON and YAML configuration formats
 - Multiple config files with `-f` flag (like Docker Compose)
+
+## Differences from the TypeScript version
+
+The Go rewrite is behavior-compatible with the TypeScript original for all valid inputs.
+A few intentional divergences harden security and robustness:
+
+- **Built-in commands run without a shell.** Internal `git` / `npm` / `ssh-keyscan`
+  invocations execute as argument vectors, not through `/bin/sh -c`. The TypeScript version
+  interpolated values (including project URLs read from `.gogo`) into a shell string, which
+  allowed command injection / remote code execution when cloning an untrusted meta
+  repository. `gogo exec` and `gogo run` still run shell commands — that is their purpose.
+- **Project paths are validated.** Project keys in `.gogo` (and the `folder` argument of
+  `gogo project create` / `gogo project import`) must be relative and stay within the
+  repository; absolute paths and `..` traversal are rejected. The TypeScript version
+  performed no such check, so a malicious `.gogo` could create or move directories outside
+  the repository.
+- **`gogo init` has no `-f` shorthand.** Use `--force`. (The global `-f` / `--file` overlay
+  flag is unchanged.) The TypeScript CLI accepted `-f` for both, which the Go CLI framework
+  cannot express without a flag collision.
 
 ## Installation
 

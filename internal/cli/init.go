@@ -16,7 +16,7 @@ func newInitCmd() *cobra.Command {
 		Short: "Initialize a new gogo-meta repository",
 		RunE:  runInit,
 	}
-	cmd.Flags().BoolP("force", "f", false, "Overwrite existing config file")
+	cmd.Flags().Bool("force", false, "Overwrite existing config file")
 	cmd.Flags().String("format", "json", "Config file format (json or yaml)")
 	return cmd
 }

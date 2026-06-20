@@ -601,6 +601,25 @@ func TestListCommands(t *testing.T) {
 	})
 }
 
+func TestIsSafeProjectPath(t *testing.T) {
+	safe := []string{"libs/api", "a/b/c", "a/../b", "api"}
+	for _, p := range safe {
+		assert.True(t, IsSafeProjectPath(p), "expected safe: %q", p)
+	}
+	unsafe := []string{"../x", "../../x", "/abs", "a/../../b", "..", "", ".", "/"}
+	for _, p := range unsafe {
+		assert.False(t, IsSafeProjectPath(p), "expected unsafe: %q", p)
+	}
+}
+
+func TestValidateRejectsUnsafeProjectPath(t *testing.T) {
+	err := Validate(MetaConfig{Projects: map[string]string{"../evil": "git@x:o/r.git"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid project path")
+
+	require.NoError(t, Validate(MetaConfig{Projects: map[string]string{"libs/api": "git@x:o/r.git"}}))
+}
+
 func TestOverlayFilesState(t *testing.T) {
 	SetOverlayFiles(nil)
 	assert.Nil(t, GetOverlayFiles())
