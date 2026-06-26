@@ -61,10 +61,10 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.2",
+    "@eslint/js": "^10.0.0",
     "@types/node": "^25.0.0",
     "@vitest/coverage-v8": "^4.0.0",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.0",
     "memfs": "^4.15.0",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
