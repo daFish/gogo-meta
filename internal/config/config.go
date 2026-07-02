@@ -107,9 +107,18 @@ type MetaConfig struct {
 
 // MetaConfigResult is the result of reading a meta config file.
 type MetaConfigResult struct {
-	Config  MetaConfig
-	Format  ConfigFormat
-	MetaDir string
+	Config          MetaConfig
+	Format          ConfigFormat
+	MetaDir         string
+	AppliedOverlays []AppliedOverlay
+	LocalProjects   map[string]string
+	Warnings        []string
+}
+
+// AppliedOverlay is an overlay config that was merged into the primary config.
+type AppliedOverlay struct {
+	Name  string
+	Local bool
 }
 
 // ConfigError represents a configuration error with an optional file path.
@@ -156,6 +165,14 @@ func FilenameForFormat(format ConfigFormat) string {
 	}
 	return ".gogo"
 }
+
+// LocalFilenameForPrimary returns the .gogo.local sibling filename for a primary config filename.
+func LocalFilenameForPrimary(primaryFilename string) string {
+	suffix := strings.TrimPrefix(primaryFilename, MetaFile)
+	return MetaFile + ".local" + suffix
+}
+
+var LocalOverlayNames = []string{".gogo.local", ".gogo.local.yaml", ".gogo.local.yml"}
 
 func parseContent(content []byte, format ConfigFormat) (*MetaConfig, error) {
 	var config MetaConfig
@@ -462,6 +479,30 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 		}
 	}
 
+	var appliedOverlays []AppliedOverlay
+	var localProjects map[string]string
+	var warnings []string
+
+	if extraOverlayFiles == nil {
+		localName := LocalFilenameForPrimary(filepath.Base(metaPath))
+		for _, name := range LocalOverlayNames {
+			if name != localName && FileExists(filepath.Join(metaDir, name)) {
+				warnings = append(warnings, fmt.Sprintf(
+					"Local overlay %s exists but will not be merged (format differs from the primary config)", name))
+			}
+		}
+		localPath := filepath.Join(metaDir, localName)
+		if FileExists(localPath) {
+			localConfig, err := ReadOverlayConfig(localPath)
+			if err != nil {
+				return nil, err
+			}
+			localProjects = localConfig.Projects
+			*config = MergeConfigs(*config, *localConfig)
+			appliedOverlays = append(appliedOverlays, AppliedOverlay{Name: localName, Local: true})
+		}
+	}
+
 	// Determine overlay files to merge.
 	filesToMerge := overlayFiles
 	if extraOverlayFiles != nil {
@@ -481,12 +522,16 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 			return nil, err
 		}
 		*config = MergeConfigs(*config, *overlayConfig)
+		appliedOverlays = append(appliedOverlays, AppliedOverlay{Name: overlayRelPath, Local: false})
 	}
 
 	return &MetaConfigResult{
-		Config:  *config,
-		Format:  format,
-		MetaDir: metaDir,
+		Config:          *config,
+		Format:          format,
+		MetaDir:         metaDir,
+		AppliedOverlays: appliedOverlays,
+		LocalProjects:   localProjects,
+		Warnings:        warnings,
 	}, nil
 }
 

@@ -119,12 +119,54 @@ func resolveLoopOptions(cmd *cobra.Command) (loop.Options, error) {
 	}, nil
 }
 
+func syncLocalExcludes(metaDir string, localProjects map[string]string) error {
+	paths := make([]string, 0, len(localProjects))
+	for p := range localProjects {
+		paths = append(paths, p)
+	}
+	changed, err := config.SyncGitExcludeManagedBlock(metaDir, paths)
+	if err != nil {
+		return err
+	}
+	if changed {
+		output.Info("Updated .git/info/exclude for .gogo.local project directories")
+	}
+	return nil
+}
+
+func ensureLocalConfigIgnored(metaDir string) error {
+	for _, name := range config.LocalOverlayNames {
+		if _, err := config.AddToGitignore(metaDir, name); err != nil {
+			return fmt.Errorf("adding %s to .gitignore: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func printOverlayInfo(result *config.MetaConfigResult) {
+	for _, w := range result.Warnings {
+		output.Warning(w)
+	}
+	for _, ov := range result.AppliedOverlays {
+		if ov.Local {
+			output.Info(fmt.Sprintf("Using local overlay config: %s", ov.Name))
+		} else {
+			output.Info(fmt.Sprintf("Using overlay config: %s", ov.Name))
+		}
+	}
+}
+
 func resolveConfig() (*config.MetaConfigResult, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
-	return config.ReadMetaConfig(cwd, nil)
+	result, err := config.ReadMetaConfig(cwd, nil)
+	if err != nil {
+		return nil, err
+	}
+	printOverlayInfo(result)
+	return result, nil
 }
 
 func requireMetaDir() (string, error) {

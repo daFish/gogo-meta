@@ -54,3 +54,33 @@ func TestInitForceOverwrites(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, string(b), "keep") // overwritten to default empty config
 }
+
+func TestInitPrintsLocalHint(t *testing.T) {
+	dir := t.TempDir()
+	initTestChdir(t, dir)
+	buf := captureOutput(t)
+
+	root := NewRootCommand("test")
+	root.SetArgs([]string{"init"})
+	require.NoError(t, root.Execute())
+
+	assert.Contains(t, buf.String(),
+		"Tip: Create a .gogo.local file for personal overrides")
+}
+
+func TestInitAddsLocalConfigToGitignore(t *testing.T) {
+	dir := t.TempDir()
+	initTestChdir(t, dir)
+	silenceOutput(t)
+
+	root := NewRootCommand("test")
+	root.SetArgs([]string{"init"})
+	require.NoError(t, root.Execute())
+
+	b, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	s := string(b)
+	assert.Contains(t, s, ".gogo.local\n")
+	assert.Contains(t, s, ".gogo.local.yaml")
+	assert.Contains(t, s, ".gogo.local.yml")
+}
