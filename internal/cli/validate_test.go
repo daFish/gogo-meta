@@ -13,6 +13,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestValidateWorkingCopySurfacesMergeError(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	config.SetOverlayFiles([]string{"does-not-exist.yaml"})
+	defer config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+
+	hasErrors := validateWorkingCopy(dir, nil, nil)
+	assert.True(t, hasErrors, "broken merged config must be surfaced, not silently passed")
+	assert.Contains(t, buf.String(), "Overlay config file not found")
+}
+
+func TestValidateWorkingCopyWarnsOnMismatchedLocal(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local.yaml"),
+		[]byte("projects:\n  b: urlB\n"), 0o644))
+	config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+
+	hasErrors := validateWorkingCopy(dir, nil, nil)
+	assert.False(t, hasErrors)
+	assert.Contains(t, buf.String(), "will not be merged",
+		"validate must surface the format-mismatch warning")
+}
+
 func TestValidateWorkingCopyMissingDir(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
