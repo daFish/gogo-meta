@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/stretchr/testify/assert"
@@ -120,6 +121,30 @@ func TestMigrateUpdatesGitignore(t *testing.T) {
 	gi, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
 	assert.NotContains(t, string(gi), "lib/api")
 	assert.Contains(t, string(gi), "packages/api")
+}
+
+func TestMigrateLocalProjectMoveGoesToGitExclude(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git", "info"), 0o755))
+	writeGogo(t, dir, `{"projects":{}}`)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
+		[]byte(`{"projects":{"packages/api":"git@x:org/api.git"}}`), 0o644))
+	from := mkGitRepo(t, dir, "lib/api")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("lib/api\n"), 0o644))
+	config.SetOverlayFiles(nil)
+	_ = captureOutput(t)
+
+	code, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, false)
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.DirExists(t, filepath.Join(dir, "packages", "api", ".git"))
+
+	excl, err := os.ReadFile(filepath.Join(dir, ".git", "info", "exclude"))
+	require.NoError(t, err)
+	assert.Contains(t, string(excl), "packages/api", "local move → .git/info/exclude")
+
+	gi, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	assert.NotContains(t, string(gi), "packages/api", "local move must not touch shared .gitignore")
 }
 
 func TestMigrateDryRun(t *testing.T) {

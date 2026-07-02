@@ -34,6 +34,13 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Keep the gogo-meta-managed block in .git/info/exclude in sync with the full
+	// .gogo.local project set — personal dirs stay out of the shared .gitignore, and
+	// dropping a project from .gogo.local removes its stale entry. Filter-independent.
+	if err := syncLocalExcludes(metaDir, configResult.LocalProjects); err != nil {
+		return err
+	}
+
 	filterOpts, err := resolveFilterOptions(cmd)
 	if err != nil {
 		return err

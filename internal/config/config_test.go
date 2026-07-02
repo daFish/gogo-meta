@@ -628,3 +628,119 @@ func TestOverlayFilesState(t *testing.T) {
 	assert.Equal(t, []string{".gogo.devops", ".gogo.staging"}, GetOverlayFiles())
 	SetOverlayFiles(nil)
 }
+
+func TestLocalFilenameForPrimary(t *testing.T) {
+	cases := map[string]string{
+		".gogo":      ".gogo.local",
+		".gogo.yaml": ".gogo.local.yaml",
+		".gogo.yml":  ".gogo.local.yml",
+	}
+	for primary, want := range cases {
+		assert.Equal(t, want, LocalFilenameForPrimary(primary), "primary %q", primary)
+	}
+}
+
+func TestReadMetaConfigMergesLocalInGlobalMode(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
+		[]byte(`{"projects":{"b":"urlB"}}`), 0o644))
+
+	result, err := ReadMetaConfig(dir, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "urlA", result.Config.Projects["a"])
+	assert.Equal(t, "urlB", result.Config.Projects["b"])
+	assert.Equal(t, []AppliedOverlay{{Name: ".gogo.local", Local: true}}, result.AppliedOverlays)
+	assert.Equal(t, map[string]string{"b": "urlB"}, result.LocalProjects,
+		"local project set exposed without re-reading the file")
+}
+
+func TestReadMetaConfigLocalAbsent(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+
+	result, err := ReadMetaConfig(dir, nil)
+	require.NoError(t, err)
+	assert.Empty(t, result.AppliedOverlays)
+	_, hasB := result.Config.Projects["b"]
+	assert.False(t, hasB)
+}
+
+func TestReadMetaConfigExplicitModeSkipsLocal(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
+		[]byte(`{"projects":{"b":"urlB"}}`), 0o644))
+
+	result, err := ReadMetaConfig(dir, []string{})
+	require.NoError(t, err)
+	_, hasB := result.Config.Projects["b"]
+	assert.False(t, hasB, "explicit mode must not auto-load .gogo.local")
+	assert.Empty(t, result.AppliedOverlays)
+}
+
+func TestReadMetaConfigPartialLocalOverlayAllowed(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	// Local overlay omits "projects" entirely — must be accepted (applyDefaults
+	// sets an empty projects map), and its commands must merge.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
+		[]byte(`{"commands":{"hi":"echo hi"}}`), 0o644))
+
+	result, err := ReadMetaConfig(dir, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "urlA", result.Config.Projects["a"])
+	_, ok := result.Config.Commands["hi"]
+	assert.True(t, ok, "command from a partial .gogo.local overlay should merge")
+}
+
+func TestUnmergedLocalSibling(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	// JSON primary → derived is .gogo.local; a .gogo.local.yaml won't be merged.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local.yaml"),
+		[]byte("projects:\n  b: urlB\n"), 0o644))
+
+	got, err := UnmergedLocalSibling(dir)
+	require.NoError(t, err)
+	assert.Equal(t, ".gogo.local.yaml", got)
+}
+
+func TestUnmergedLocalSiblingNoneWhenDerivedMatches(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
+		[]byte(`{"projects":{"b":"urlB"}}`), 0o644))
+
+	got, err := UnmergedLocalSibling(dir)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestReadMetaConfigMergeOrderPrimaryLocalOverlay(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"x":"primary"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
+		[]byte(`{"projects":{"x":"local","y":"local"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.devops"),
+		[]byte(`{"projects":{"x":"devops"}}`), 0o644))
+
+	SetOverlayFiles([]string{".gogo.devops"})
+	defer SetOverlayFiles(nil)
+
+	result, err := ReadMetaConfig(dir, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "devops", result.Config.Projects["x"], "-f overlay wins last")
+	assert.Equal(t, "local", result.Config.Projects["y"], "from .gogo.local")
+	assert.Equal(t, []AppliedOverlay{
+		{Name: ".gogo.local", Local: true},
+		{Name: ".gogo.devops", Local: false},
+	}, result.AppliedOverlays)
+}
