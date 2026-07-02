@@ -93,7 +93,10 @@ const missingDirectoryHint = "directory missing — run 'gogo migrate' if it mov
 func validateWorkingCopy(cwd string) bool {
 	result, err := config.ReadMetaConfig(cwd, nil)
 	if err != nil {
-		return false
+		// A broken merge (bad .gogo.local or -f overlay) must fail loudly: the
+		// merged config is the effective config, so validate must agree with runtime.
+		output.Error(fmt.Sprintf("Failed to load merged configuration: %v", err))
+		return true
 	}
 
 	projectPaths := make([]string, 0, len(result.Config.Projects))

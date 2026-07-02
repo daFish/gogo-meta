@@ -105,9 +105,21 @@ type MetaConfig struct {
 
 // MetaConfigResult is the result of reading a meta config file.
 type MetaConfigResult struct {
-	Config  MetaConfig
-	Format  ConfigFormat
-	MetaDir string
+	Config          MetaConfig
+	Format          ConfigFormat
+	MetaDir         string
+	AppliedOverlays []AppliedOverlay
+	// LocalProjects holds the project paths declared in the auto-merged .gogo.local
+	// overlay (nil if there was none). Consumers route these to .git/info/exclude
+	// rather than the shared .gitignore, without re-reading the file.
+	LocalProjects map[string]string
+}
+
+// AppliedOverlay records one overlay config that was merged into the primary
+// config, in merge order. Local is true for the auto-loaded .gogo.local file.
+type AppliedOverlay struct {
+	Name  string
+	Local bool
 }
 
 // ConfigError represents a configuration error with an optional file path.
@@ -153,6 +165,41 @@ func FilenameForFormat(format ConfigFormat) string {
 		return ".gogo.yaml"
 	}
 	return ".gogo"
+}
+
+// LocalFilenameForPrimary returns the .gogo.local sibling filename for a primary
+// config filename by inserting ".local" after the ".gogo" stem:
+//
+//	.gogo       -> .gogo.local
+//	.gogo.yaml  -> .gogo.local.yaml
+//	.gogo.yml   -> .gogo.local.yml
+func LocalFilenameForPrimary(primaryFilename string) string {
+	suffix := strings.TrimPrefix(primaryFilename, MetaFile)
+	return MetaFile + ".local" + suffix
+}
+
+// localOverlayNames are the three possible .gogo.local sibling filenames.
+var localOverlayNames = []string{".gogo.local", ".gogo.local.yaml", ".gogo.local.yml"}
+
+// UnmergedLocalSibling returns the name of a .gogo.local* file that exists beside
+// the primary config but is NOT the one derived from the primary's filename — so it
+// silently will not be merged (format mismatch). Returns "" if there is none.
+func UnmergedLocalSibling(cwd string) (string, error) {
+	metaPath, err := FindMetaFileUp(cwd)
+	if err != nil || metaPath == "" {
+		return "", err
+	}
+	metaDir := filepath.Dir(metaPath)
+	derived := LocalFilenameForPrimary(filepath.Base(metaPath))
+	for _, name := range localOverlayNames {
+		if name == derived {
+			continue
+		}
+		if FileExists(filepath.Join(metaDir, name)) {
+			return name, nil
+		}
+	}
+	return "", nil
 }
 
 func parseContent(content []byte, format ConfigFormat) (*MetaConfig, error) {
@@ -357,7 +404,26 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 		}
 	}
 
-	// Determine overlay files to merge.
+	var appliedOverlays []AppliedOverlay
+	var localProjects map[string]string
+
+	// Global mode (no explicit overlay list): auto-load the local overlay
+	// (.gogo.local / .gogo.local.yaml / .gogo.local.yml) before -f overlays.
+	if extraOverlayFiles == nil {
+		localName := LocalFilenameForPrimary(filepath.Base(metaPath))
+		localPath := filepath.Join(metaDir, localName)
+		if FileExists(localPath) {
+			localConfig, err := ReadOverlayConfig(localPath)
+			if err != nil {
+				return nil, err
+			}
+			localProjects = localConfig.Projects
+			*config = MergeConfigs(*config, *localConfig)
+			appliedOverlays = append(appliedOverlays, AppliedOverlay{Name: localName, Local: true})
+		}
+	}
+
+	// Determine -f overlay files to merge.
 	filesToMerge := overlayFiles
 	if extraOverlayFiles != nil {
 		filesToMerge = extraOverlayFiles
@@ -376,12 +442,15 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 			return nil, err
 		}
 		*config = MergeConfigs(*config, *overlayConfig)
+		appliedOverlays = append(appliedOverlays, AppliedOverlay{Name: overlayRelPath, Local: false})
 	}
 
 	return &MetaConfigResult{
-		Config:  *config,
-		Format:  format,
-		MetaDir: metaDir,
+		Config:          *config,
+		Format:          format,
+		MetaDir:         metaDir,
+		AppliedOverlays: appliedOverlays,
+		LocalProjects:   localProjects,
 	}, nil
 }
 

@@ -120,6 +120,11 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 	}
 	cfg := result.Config
 
+	// Local-only projects (from .gogo.local) get their ignore bookkeeping in
+	// .git/info/exclude, not the shared .gitignore. Reuse the set the merged read
+	// already produced — no second parse of .gogo.local.
+	localProjects := result.LocalProjects
+
 	if len(cfg.Projects) == 0 {
 		output.Success("Working copy already matches configuration")
 		return 0, nil
@@ -191,13 +196,24 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 			return 0, err
 		}
 		pruneEmptyParents(metaDir, m.from)
-		if _, err := config.RemoveFromGitignore(metaDir, m.from); err != nil {
-			return 0, err
-		}
-		if _, err := config.AddToGitignore(metaDir, m.to); err != nil {
-			return 0, err
+		// Shared projects → shared .gitignore. Local projects are keyed by their
+		// (unchanged) config path and handled by the managed exclude block below.
+		if _, isLocal := localProjects[m.to]; !isLocal {
+			if _, err := config.RemoveFromGitignore(metaDir, m.from); err != nil {
+				return 0, err
+			}
+			if _, err := config.AddToGitignore(metaDir, m.to); err != nil {
+				return 0, err
+			}
 		}
 		output.ProjectStatus(m.to, "success", fmt.Sprintf("moved from %s", m.from))
+	}
+
+	if len(moves) > 0 && !dryRun {
+		ensureLocalConfigIgnored(metaDir)
+		if err := syncLocalExcludes(metaDir, localProjects); err != nil {
+			return 0, err
+		}
 	}
 
 	for _, p := range ambiguous {

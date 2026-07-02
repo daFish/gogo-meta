@@ -59,8 +59,11 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	ensureLocalConfigIgnored(cwd)
+
 	filename := config.FilenameForFormat(format)
 	output.Success(fmt.Sprintf("Created %s file in %s", filename, cwd))
 	output.Info("Add projects with: gogo project import <folder> <repo-url>")
+	output.Info("Tip: Create a .gogo.local file for personal overrides (already added to .gitignore)")
 	return nil
 }

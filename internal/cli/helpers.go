@@ -9,6 +9,7 @@ import (
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/filter"
 	"github.com/daFish/gogo-meta/internal/loop"
+	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
 )
 
@@ -70,12 +71,56 @@ func resolveLoopOptions(cmd *cobra.Command) (loop.Options, error) {
 	}, nil
 }
 
+// syncLocalExcludes keeps the gogo-meta-managed block in .git/info/exclude equal to
+// the .gogo.local project set, so personal repo dirs stay out of the shared .gitignore
+// and dropped projects lose their stale exclude entry.
+func syncLocalExcludes(metaDir string, localProjects map[string]string) error {
+	paths := make([]string, 0, len(localProjects))
+	for p := range localProjects {
+		paths = append(paths, p)
+	}
+	changed, err := config.SyncGitExcludeManagedBlock(metaDir, paths)
+	if err != nil {
+		return err
+	}
+	if changed {
+		output.Info("Updated .git/info/exclude for .gogo.local project directories")
+	}
+	return nil
+}
+
+// ensureLocalConfigIgnored makes sure all three .gogo.local* filenames are in the
+// shared .gitignore, so a personal overlay file is never accidentally committed.
+func ensureLocalConfigIgnored(metaDir string) {
+	for _, name := range []string{".gogo.local", ".gogo.local.yaml", ".gogo.local.yml"} {
+		_, _ = config.AddToGitignore(metaDir, name)
+	}
+}
+
+func printOverlayInfo(result *config.MetaConfigResult) {
+	for _, ov := range result.AppliedOverlays {
+		if ov.Local {
+			output.Info(fmt.Sprintf("Using local overlay config: %s", ov.Name))
+		} else {
+			output.Info(fmt.Sprintf("Using overlay config: %s", ov.Name))
+		}
+	}
+}
+
 func resolveConfig() (*config.MetaConfigResult, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
-	return config.ReadMetaConfig(cwd, nil)
+	result, err := config.ReadMetaConfig(cwd, nil)
+	if err != nil {
+		return nil, err
+	}
+	if sibling, serr := config.UnmergedLocalSibling(cwd); serr == nil && sibling != "" {
+		output.Warning(fmt.Sprintf("Local overlay %s exists but will not be merged (format differs from the primary config)", sibling))
+	}
+	printOverlayInfo(result)
+	return result, nil
 }
 
 func requireMetaDir() (string, error) {

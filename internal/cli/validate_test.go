@@ -6,10 +6,24 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestValidateWorkingCopySurfacesMergeError(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	config.SetOverlayFiles([]string{"does-not-exist.yaml"}) // broken -f overlay
+	defer config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+
+	hasErrors := validateWorkingCopy(dir)
+	assert.True(t, hasErrors, "broken merged config must be surfaced, not silently passed")
+	assert.Contains(t, buf.String(), "Failed to load merged configuration")
+}
 
 func TestValidateWorkingCopyMissingDir(t *testing.T) {
 	dir := t.TempDir()
