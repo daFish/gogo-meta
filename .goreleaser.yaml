@@ -34,6 +34,29 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
+homebrew_casks:
+  - name: gogo
+    binaries:
+      - gogo
+    directory: Casks
+    homepage: 'https://github.com/daFish/gogo-meta'
+    description: 'Run commands across multiple Git repositories at once'
+    custom_block: |
+      depends_on macos: :monterey
+    hooks:
+      post:
+        install: |
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/gogo"] if OS.mac?
+    commit_author:
+      name: 'github-actions[bot]'
+      email: '41898282+github-actions[bot]@users.noreply.github.com'
+    commit_msg_template: 'chore: brew cask update for {{ .ProjectName }} {{ .Tag }}'
+    repository:
+      owner: daFish
+      name: homebrew-gogo-meta
+      branch: main
+      token: '{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}'
+
 dockers:
   - image_templates:
       - 'ghcr.io/dafish/gogo-meta:{{ .Version }}-amd64'
