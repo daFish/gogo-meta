@@ -71,6 +71,26 @@ from the `projects` map in `.gogo`. `gogo validate` also no longer validates
 
 * add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
 
+## [3.0.0](https://github.com/daFish/gogo-meta/compare/v2.0.0...v3.0.0) (2026-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* rewrite the tool in Go (until 6ae349af)
+
+### Bug Fixes
+
+* **ci:** match release-please tags to existing v-prefixed history ([e0b777f](https://github.com/daFish/gogo-meta/commit/e0b777fb084450ff6f189b2c67a94bcec3c14806))
+* **deps:** update dependency commander to v15 ([e1ac724](https://github.com/daFish/gogo-meta/commit/e1ac7242c75b6316aca54a40990f76279522a88a))
+
+
+### Code Refactoring
+
+* clean up the rewrite (dead code, typed Loop, ssh DI, parallel fix) ([d7f0071](https://github.com/daFish/gogo-meta/commit/d7f00713df38043f707930642ab0aec5b68570a4))
+* implement recent changes in Go (until 44344a19) ([a243633](https://github.com/daFish/gogo-meta/commit/a2436336651025f36040a3d94f7ba0e2e85d8d1e))
+* rewrite the tool in Go (until 6ae349af) ([6a33235](https://github.com/daFish/gogo-meta/commit/6a33235f409e18035aba5258aad7d1a71fe80ee7))
+* **security:** use shell-free built-ins and improve signal handling (diverges from TS version) ([4e9ebee](https://github.com/daFish/gogo-meta/commit/4e9ebeed1588a2067ba332e8fd40335053de0865))
+
 ## [1.1.1](https://github.com/daFish/gogo-meta/compare/v1.1.0...v1.1.1) (2026-01-27)
 
 
