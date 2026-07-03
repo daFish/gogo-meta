@@ -9,6 +9,8 @@ A modern Go CLI for managing multi-repository projects. Execute commands across 
 
 Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a19bfc70995b142f49a51316dbe126e9f8f) — originally written in TypeScript and now rewritten in Go with near-identical CLI behavior (see [Differences from the TypeScript version](#differences-from-the-typescript-version)).
 
+> **Upgrading from the TypeScript version (v1.x / v2.x)?** See the [upgrade guide](UPGRADE.md) for step-by-step migration instructions and the behavior changes in v3.
+
 ## Features
 
 - Clone entire project ecosystems with one command
