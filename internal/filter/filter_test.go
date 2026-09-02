@@ -120,3 +120,36 @@ func TestCreateFilterOptions(t *testing.T) {
 		assert.Nil(t, opts.ExcludePattern)
 	})
 }
+
+func TestApplyGroupOnly(t *testing.T) {
+	dirs := []string{"src/app", "src/lib", "docs", "tools/cli"}
+
+	t.Run("restricts to group members", func(t *testing.T) {
+		result := Apply(dirs, Options{GroupOnly: []string{"src/app", "docs"}})
+		assert.Equal(t, []string{"src/app", "docs"}, result)
+	})
+
+	t.Run("matches full paths only, not basenames", func(t *testing.T) {
+		assert.Empty(t, Apply(dirs, Options{GroupOnly: []string{"app"}}))
+	})
+
+	t.Run("intersects with includeOnly", func(t *testing.T) {
+		result := Apply(dirs, Options{
+			GroupOnly:   []string{"src/app", "src/lib"},
+			IncludeOnly: []string{"lib"},
+		})
+		assert.Equal(t, []string{"src/lib"}, result)
+	})
+
+	t.Run("combines with excludeOnly", func(t *testing.T) {
+		result := Apply(dirs, Options{
+			GroupOnly:   []string{"src/app", "src/lib"},
+			ExcludeOnly: []string{"src/lib"},
+		})
+		assert.Equal(t, []string{"src/app"}, result)
+	})
+
+	t.Run("empty group option keeps all dirs", func(t *testing.T) {
+		assert.Equal(t, dirs, Apply(dirs, Options{GroupOnly: nil}))
+	})
+}

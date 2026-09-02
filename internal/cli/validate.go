@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -86,14 +87,39 @@ func findConfigFiles(cwd string) ([]string, error) {
 
 const missingDirectoryHint = "directory missing — run 'gogo migrate' if it moved, or 'gogo git update' to clone"
 
-// validateWorkingCopy reports whether any configured project directory is
-// missing from the working copy. It prints per-project errors and returns true
-// when at least one directory is missing. If the cwd is not inside a meta repo
-// (or there are no projects), it returns false without output.
+// validateWorkingCopy checks the merged config — cross-references between
+// projects, groups and commands — plus the presence of every configured
+// project directory in the working copy. It prints the problems it finds and
+// returns true when there was at least one. If the cwd is not inside a meta
+// repo it returns false without output.
 func validateWorkingCopy(cwd string) bool {
+	metaPath, err := config.FindMetaFileUp(cwd)
+	if err != nil || metaPath == "" {
+		return false
+	}
+
 	result, err := config.ReadMetaConfig(cwd, nil)
 	if err != nil {
-		return false
+		// The per-file checks already reported syntax and structure problems;
+		// what surfaces here are cross-file issues such as a group referring to
+		// a project defined nowhere. The path is left out because the offending
+		// entry may come from any of the merged files.
+		message := err.Error()
+		var cfgErr *config.ConfigError
+		if errors.As(err, &cfgErr) {
+			message = cfgErr.Message
+		}
+		output.Error(message)
+		return true
+	}
+
+	hasErrors := false
+
+	// Group and command cross-references are only meaningful once every config
+	// file has been merged, so they are checked here rather than per file.
+	if err := config.ValidateReferences(result.Config); err != nil {
+		output.Error(err.Error())
+		hasErrors = true
 	}
 
 	projectPaths := make([]string, 0, len(result.Config.Projects))
@@ -101,24 +127,24 @@ func validateWorkingCopy(cwd string) bool {
 		projectPaths = append(projectPaths, p)
 	}
 	if len(projectPaths) == 0 {
-		return false
+		return hasErrors
 	}
 	sort.Strings(projectPaths)
 
-	hasErrors := false
+	missing := false
 	for _, projectPath := range projectPaths {
 		projectDir := filepath.Join(result.MetaDir, projectPath)
 		if !config.FileExists(projectDir) {
 			output.ProjectStatus(projectPath, "error", missingDirectoryHint)
-			hasErrors = true
+			missing = true
 		}
 	}
 
-	if !hasErrors {
+	if !missing {
 		output.Success(fmt.Sprintf("All %d project directories present", len(projectPaths)))
 	}
 
-	return hasErrors
+	return hasErrors || missing
 }
 
 func validateConfigFile(filePath, filename string) validationResult {

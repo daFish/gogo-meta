@@ -29,6 +29,7 @@ func warnUnverifiedSSHHosts(urls []string) {
 }
 
 func addFilterFlags(cmd *cobra.Command) {
+	cmd.Flags().String("group", "", "Only include projects from the named group(s) in the config (comma-separated)")
 	cmd.Flags().String("include-only", "", "Only include specified directories (comma-separated)")
 	cmd.Flags().String("exclude-only", "", "Exclude specified directories (comma-separated)")
 	cmd.Flags().String("include-pattern", "", "Include directories matching regex pattern")
@@ -65,13 +66,45 @@ func getIntFlag(cmd *cobra.Command, name string) int {
 	return val
 }
 
+// resolveFilterOptions builds filter options from the command's filter flags.
+// The merged config is only read when --group is used.
 func resolveFilterOptions(cmd *cobra.Command) (filter.Options, error) {
-	return filter.CreateFilterOptions(
+	return resolveFilterOptionsWithConfig(cmd, nil)
+}
+
+// resolveFilterOptionsWithConfig is resolveFilterOptions for callers that
+// already hold the merged config; cfg may be nil, in which case the config is
+// read on demand.
+func resolveFilterOptionsWithConfig(cmd *cobra.Command, cfg *config.MetaConfig) (filter.Options, error) {
+	opts, err := filter.CreateFilterOptions(
 		getStringFlag(cmd, "include-only"),
 		getStringFlag(cmd, "exclude-only"),
 		getStringFlag(cmd, "include-pattern"),
 		getStringFlag(cmd, "exclude-pattern"),
 	)
+	if err != nil {
+		return filter.Options{}, err
+	}
+
+	groupNames := filter.ParseFilterList(getStringFlag(cmd, "group"))
+	if len(groupNames) == 0 {
+		return opts, nil
+	}
+
+	if cfg == nil {
+		result, err := resolveConfig()
+		if err != nil {
+			return filter.Options{}, err
+		}
+		cfg = &result.Config
+	}
+
+	groupPaths, err := config.ResolveGroups(*cfg, groupNames)
+	if err != nil {
+		return filter.Options{}, err
+	}
+	opts.GroupOnly = groupPaths
+	return opts, nil
 }
 
 func resolveLoopOptions(cmd *cobra.Command) (loop.Options, error) {

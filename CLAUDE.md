@@ -88,6 +88,7 @@ make all            # Clean, lint, test-coverage, then build
 ```bash
 gogo init                          # Create .gogo file
 gogo exec "<command>" [--parallel] # Run command across repos
+gogo exec --group foo "<command>"  # Restrict to the projects of group foo
 gogo run [name]                    # Run predefined command from .gogo
 gogo validate                      # Validate config file(s)
 gogo migrate [--dry-run]           # Move/rename working-copy dirs to match config
@@ -100,6 +101,7 @@ gogo npm install|ci|link|run
 # Global options
 gogo -f .gogo.devops exec "..."    # Merge additional config file
 gogo -f a.yaml -f b.yaml exec "..."  # Multiple overlays
+gogo --group foo,bar exec "..."    # Filter by named group(s) from the config
 ```
 
 ## Code Conventions
@@ -135,9 +137,13 @@ Precedence: `.gogo` > `.gogo.yaml` > `.gogo.yml`.
     "path/to/repo": "git@github.com:org/repo.git"
   },
   "ignore": [".git", "node_modules"],
+  "groups": {
+    "foo": ["path/to/repo"]
+  },
   "commands": {
     "build": "npm run build",
-    "test": { "cmd": "npm test", "parallel": true }
+    "test": { "cmd": "npm test", "parallel": true },
+    "deploy": { "cmd": "make deploy", "groups": ["foo"] }
   }
 }
 ```
@@ -148,9 +154,29 @@ projects:
 ignore:
   - .git
   - node_modules
+groups:
+  foo:
+    - path/to/repo
 commands:
   build: npm run build
   test:
     cmd: npm test
     parallel: true
+  deploy:
+    cmd: make deploy
+    groups:
+      - foo
 ```
+
+### Groups
+
+Groups are named sets of project paths. They are resolved to project paths by
+`config.ResolveGroups` and applied as the first stage of `filter.Apply`
+(`Options.GroupOnly`), so they intersect with the other filters.
+
+Group and command cross-references are checked lazily, not while reading a
+config: `Validate` covers a single file structurally, `ResolveGroups` reports
+bad references when a group is actually used, and `config.ValidateReferences`
+checks them across the *merged* config for `gogo validate`. Reading stays
+permissive because an overlay may group projects declared in the base config
+and vice versa.

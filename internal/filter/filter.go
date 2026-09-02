@@ -9,6 +9,10 @@ import (
 
 // Options defines the filter criteria for project directories.
 type Options struct {
+	// GroupOnly holds project paths resolved from named groups in the config
+	// (see config.ResolveGroups). Empty means no group restriction; the
+	// directories are matched by exact path.
+	GroupOnly      []string
 	IncludeOnly    []string
 	ExcludeOnly    []string
 	IncludePattern *regexp.Regexp
@@ -16,10 +20,19 @@ type Options struct {
 }
 
 // Apply applies filter options to a list of directories.
-// Filter order: includeOnly → excludeOnly → includePattern → excludePattern.
+// Filter order: groupOnly → includeOnly → excludeOnly → includePattern → excludePattern.
+// All stages are combined with AND, so --group foo --include-only api runs only
+// in the projects of group foo that are also named api.
 func Apply(directories []string, opts Options) []string {
 	result := make([]string, len(directories))
 	copy(result, directories)
+
+	if len(opts.GroupOnly) > 0 {
+		groupSet := toSet(opts.GroupOnly)
+		result = filterDirs(result, func(dir string) bool {
+			return groupSet[dir]
+		})
+	}
 
 	if len(opts.IncludeOnly) > 0 {
 		includeSet := toSet(opts.IncludeOnly)

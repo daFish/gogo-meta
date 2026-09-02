@@ -58,13 +58,20 @@ func runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown command: %q. Available commands: %s", name, strings.Join(available, ", "))
 	}
 
-	cliFilterOpts, err := resolveFilterOptions(cmd)
+	cliFilterOpts, err := resolveFilterOptionsWithConfig(cmd, &configResult.Config)
 	if err != nil {
 		return err
 	}
 
 	// Merge CLI filters with command definition filters.
 	mergedFilter := cliFilterOpts
+	if len(mergedFilter.GroupOnly) == 0 && len(commandDef.Groups) > 0 {
+		groupPaths, err := config.ResolveGroups(configResult.Config, commandDef.Groups)
+		if err != nil {
+			return err
+		}
+		mergedFilter.GroupOnly = groupPaths
+	}
 	if len(mergedFilter.IncludeOnly) == 0 && len(commandDef.IncludeOnly) > 0 {
 		mergedFilter.IncludeOnly = commandDef.IncludeOnly
 	}
