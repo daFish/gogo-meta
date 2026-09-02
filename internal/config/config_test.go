@@ -698,7 +698,7 @@ func TestReadMetaConfigPartialLocalOverlayAllowed(t *testing.T) {
 	assert.True(t, ok, "command from a partial .gogo.local overlay should merge")
 }
 
-func TestUnmergedLocalSibling(t *testing.T) {
+func TestReadMetaConfigWarnsOnMismatchedLocalSibling(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
 		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
@@ -706,21 +706,37 @@ func TestUnmergedLocalSibling(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local.yaml"),
 		[]byte("projects:\n  b: urlB\n"), 0o644))
 
-	got, err := UnmergedLocalSibling(dir)
+	result, err := ReadMetaConfig(dir, nil)
 	require.NoError(t, err)
-	assert.Equal(t, ".gogo.local.yaml", got)
+	require.Len(t, result.Warnings, 1)
+	assert.Contains(t, result.Warnings[0], ".gogo.local.yaml")
+	assert.Contains(t, result.Warnings[0], "will not be merged")
+	_, hasB := result.Config.Projects["b"]
+	assert.False(t, hasB, "mismatched sibling must not be merged")
 }
 
-func TestUnmergedLocalSiblingNoneWhenDerivedMatches(t *testing.T) {
+func TestReadMetaConfigNoWarningWhenDerivedMatches(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
 		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
 		[]byte(`{"projects":{"b":"urlB"}}`), 0o644))
 
-	got, err := UnmergedLocalSibling(dir)
+	result, err := ReadMetaConfig(dir, nil)
 	require.NoError(t, err)
-	assert.Empty(t, got)
+	assert.Empty(t, result.Warnings)
+}
+
+func TestReadMetaConfigNoSiblingWarningInExplicitMode(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local.yaml"),
+		[]byte("projects:\n  b: urlB\n"), 0o644))
+
+	result, err := ReadMetaConfig(dir, []string{})
+	require.NoError(t, err)
+	assert.Empty(t, result.Warnings, "explicit -f mode never merges local overlays, so no warning")
 }
 
 func TestReadMetaConfigMergeOrderPrimaryLocalOverlay(t *testing.T) {

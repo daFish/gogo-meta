@@ -95,7 +95,9 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			added, _ := config.AddToGitignore(metaDir, folder)
-			ensureLocalConfigIgnored(metaDir)
+			if err := ensureLocalConfigIgnored(metaDir); err != nil {
+				return err
+			}
 			output.Success(fmt.Sprintf("Registered project %q (not cloned)", folder))
 			if added {
 				output.Info(fmt.Sprintf("Added %s to .gitignore", folder))
@@ -132,7 +134,9 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 	}
 
 	added, _ := config.AddToGitignore(metaDir, folder)
-	ensureLocalConfigIgnored(metaDir)
+	if err := ensureLocalConfigIgnored(metaDir); err != nil {
+		return err
+	}
 	if added {
 		output.Info(fmt.Sprintf("Added %s to .gitignore", folder))
 	}

@@ -210,7 +210,9 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 	}
 
 	if len(moves) > 0 && !dryRun {
-		ensureLocalConfigIgnored(metaDir)
+		if err := ensureLocalConfigIgnored(metaDir); err != nil {
+			return 0, err
+		}
 		if err := syncLocalExcludes(metaDir, localProjects); err != nil {
 			return 0, err
 		}

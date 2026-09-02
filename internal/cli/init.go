@@ -59,7 +59,9 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ensureLocalConfigIgnored(cwd)
+	if err := ensureLocalConfigIgnored(cwd); err != nil {
+		return err
+	}
 
 	filename := config.FilenameForFormat(format)
 	output.Success(fmt.Sprintf("Created %s file in %s", filename, cwd))

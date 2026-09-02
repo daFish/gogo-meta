@@ -58,9 +58,7 @@ func runValidate(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	workingCopyHasErrors := validateWorkingCopy(cwd)
-
-	if configHasErrors || workingCopyHasErrors {
+	if configHasErrors || workingCopyHasErrors(cwd) {
 		return fmt.Errorf("validation failed")
 	}
 	return nil
@@ -86,17 +84,20 @@ func findConfigFiles(cwd string) ([]string, error) {
 
 const missingDirectoryHint = "directory missing — run 'gogo migrate' if it moved, or 'gogo git update' to clone"
 
-// validateWorkingCopy reports whether any configured project directory is
+// workingCopyHasErrors reports whether any configured project directory is
 // missing from the working copy. It prints per-project errors and returns true
 // when at least one directory is missing. If the cwd is not inside a meta repo
 // (or there are no projects), it returns false without output.
-func validateWorkingCopy(cwd string) bool {
+func workingCopyHasErrors(cwd string) bool {
 	result, err := config.ReadMetaConfig(cwd, nil)
 	if err != nil {
 		// A broken merge (bad .gogo.local or -f overlay) must fail loudly: the
 		// merged config is the effective config, so validate must agree with runtime.
 		output.Error(fmt.Sprintf("Failed to load merged configuration: %v", err))
 		return true
+	}
+	for _, w := range result.Warnings {
+		output.Warning(w)
 	}
 
 	projectPaths := make([]string, 0, len(result.Config.Projects))

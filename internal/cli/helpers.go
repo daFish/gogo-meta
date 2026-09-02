@@ -89,15 +89,23 @@ func syncLocalExcludes(metaDir string, localProjects map[string]string) error {
 	return nil
 }
 
-// ensureLocalConfigIgnored makes sure all three .gogo.local* filenames are in the
+// ensureLocalConfigIgnored makes sure all .gogo.local* filenames are in the
 // shared .gitignore, so a personal overlay file is never accidentally committed.
-func ensureLocalConfigIgnored(metaDir string) {
-	for _, name := range []string{".gogo.local", ".gogo.local.yaml", ".gogo.local.yml"} {
-		_, _ = config.AddToGitignore(metaDir, name)
+// A failed write is an error: the ignore entry is the only thing standing between
+// a personal config and the shared repo.
+func ensureLocalConfigIgnored(metaDir string) error {
+	for _, name := range config.LocalOverlayNames {
+		if _, err := config.AddToGitignore(metaDir, name); err != nil {
+			return fmt.Errorf("adding %s to .gitignore: %w", name, err)
+		}
 	}
+	return nil
 }
 
 func printOverlayInfo(result *config.MetaConfigResult) {
+	for _, w := range result.Warnings {
+		output.Warning(w)
+	}
 	for _, ov := range result.AppliedOverlays {
 		if ov.Local {
 			output.Info(fmt.Sprintf("Using local overlay config: %s", ov.Name))
@@ -115,9 +123,6 @@ func resolveConfig() (*config.MetaConfigResult, error) {
 	result, err := config.ReadMetaConfig(cwd, nil)
 	if err != nil {
 		return nil, err
-	}
-	if sibling, serr := config.UnmergedLocalSibling(cwd); serr == nil && sibling != "" {
-		output.Warning(fmt.Sprintf("Local overlay %s exists but will not be merged (format differs from the primary config)", sibling))
 	}
 	printOverlayInfo(result)
 	return result, nil

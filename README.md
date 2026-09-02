@@ -208,6 +208,8 @@ The ignore destination mirrors the config layer, so personal choices never pollu
 
 > If a `.gogo.local.*` file exists in a format that doesn't match the primary (e.g. `.gogo.local.yaml` beside a JSON `.gogo`), gogo prints a warning that it will not be merged.
 
+> **Note:** the merged config is the effective config — a `.gogo.local` with invalid JSON/YAML makes **every** gogo command fail until you fix or remove the file. gogo fails loudly here on purpose: silently ignoring a broken overlay would run commands against a different project set than you think you have.
+
 ## Commands
 
 ### Global Options
