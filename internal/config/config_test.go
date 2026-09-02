@@ -628,3 +628,272 @@ func TestOverlayFilesState(t *testing.T) {
 	assert.Equal(t, []string{".gogo.devops", ".gogo.staging"}, GetOverlayFiles())
 	SetOverlayFiles(nil)
 }
+
+func groupConfig() MetaConfig {
+	return MetaConfig{
+		Projects: map[string]string{
+			"libs/a": "urlA",
+			"libs/b": "urlB",
+			"libs/c": "urlC",
+			"libs/d": "urlD",
+		},
+		Ignore: []string{},
+		Groups: map[string][]string{
+			"foo": {"libs/a", "libs/b"},
+			"bar": {"libs/b", "libs/c"},
+		},
+	}
+}
+
+func TestResolveGroups(t *testing.T) {
+	cfg := groupConfig()
+
+	t.Run("resolves a single group", func(t *testing.T) {
+		paths, err := ResolveGroups(cfg, []string{"foo"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"libs/a", "libs/b"}, paths)
+	})
+
+	t.Run("unions multiple groups and deduplicates", func(t *testing.T) {
+		paths, err := ResolveGroups(cfg, []string{"foo", "bar"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"libs/a", "libs/b", "libs/c"}, paths)
+	})
+
+	t.Run("returns nil for no group names", func(t *testing.T) {
+		paths, err := ResolveGroups(cfg, nil)
+		require.NoError(t, err)
+		assert.Nil(t, paths)
+	})
+
+	t.Run("errors on unknown group and lists available ones", func(t *testing.T) {
+		_, err := ResolveGroups(cfg, []string{"nope"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown group "nope"`)
+		assert.Contains(t, err.Error(), "bar, foo")
+	})
+
+	t.Run("errors when no groups are defined", func(t *testing.T) {
+		_, err := ResolveGroups(MetaConfig{Projects: map[string]string{"a": "url"}}, []string{"foo"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "No groups are defined")
+	})
+
+	t.Run("errors on group member that is not a project", func(t *testing.T) {
+		bad := groupConfig()
+		bad.Groups["broken"] = []string{"libs/missing"}
+		_, err := ResolveGroups(bad, []string{"broken"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown project "libs/missing"`)
+	})
+
+	t.Run("matches members written with a redundant path prefix", func(t *testing.T) {
+		cleaned := groupConfig()
+		cleaned.Groups["dotted"] = []string{"./libs/d"}
+		paths, err := ResolveGroups(cleaned, []string{"dotted"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"libs/d"}, paths)
+	})
+}
+
+func TestGetGroupNamesAndGetGroup(t *testing.T) {
+	cfg := groupConfig()
+	assert.Equal(t, []string{"bar", "foo"}, GetGroupNames(cfg))
+
+	members, ok := GetGroup(cfg, "foo")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"libs/a", "libs/b"}, members)
+
+	_, ok = GetGroup(cfg, "nope")
+	assert.False(t, ok)
+
+	assert.Empty(t, GetGroupNames(MetaConfig{Projects: map[string]string{}}))
+}
+
+func TestValidateGroups(t *testing.T) {
+	t.Run("accepts valid groups", func(t *testing.T) {
+		require.NoError(t, Validate(groupConfig()))
+	})
+
+	t.Run("rejects empty group name", func(t *testing.T) {
+		cfg := groupConfig()
+		cfg.Groups[""] = []string{"libs/a"}
+		err := Validate(cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "group names must not be empty")
+	})
+
+	t.Run("rejects group without members", func(t *testing.T) {
+		cfg := groupConfig()
+		cfg.Groups["empty"] = []string{}
+		err := Validate(cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must contain at least one project")
+	})
+
+	t.Run("rejects empty member path", func(t *testing.T) {
+		cfg := groupConfig()
+		cfg.Groups["blank"] = []string{" "}
+		err := Validate(cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "project paths must not be empty")
+	})
+
+	t.Run("does not check group members across files", func(t *testing.T) {
+		// A single overlay may group projects declared in the base config.
+		cfg := MetaConfig{
+			Projects: map[string]string{},
+			Groups:   map[string][]string{"foo": {"libs/a"}},
+		}
+		require.NoError(t, Validate(cfg))
+	})
+}
+
+func TestValidateReferences(t *testing.T) {
+	t.Run("accepts a consistent config", func(t *testing.T) {
+		cfg := groupConfig()
+		cfg.Commands = map[string]CommandConfig{"deploy": {Cmd: "make deploy", Groups: []string{"foo"}}}
+		require.NoError(t, ValidateReferences(cfg))
+	})
+
+	t.Run("rejects group member that is not a project", func(t *testing.T) {
+		cfg := groupConfig()
+		cfg.Groups["broken"] = []string{"libs/missing"}
+		err := ValidateReferences(cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `group "broken": unknown project "libs/missing"`)
+	})
+
+	t.Run("rejects command referencing an unknown group", func(t *testing.T) {
+		cfg := groupConfig()
+		cfg.Commands = map[string]CommandConfig{"deploy": {Cmd: "make deploy", Groups: []string{"nope"}}}
+		err := ValidateReferences(cfg)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `command "deploy": unknown group "nope"`)
+	})
+}
+
+func TestGroupsInConfigFiles(t *testing.T) {
+	t.Run("reads groups from JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, ".gogo"),
+			`{"projects":{"libs/a":"urlA","libs/b":"urlB"},"groups":{"foo":["libs/a","libs/b"]}}`)
+
+		result, err := ReadMetaConfig(dir, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"libs/a", "libs/b"}, result.Config.Groups["foo"])
+	})
+
+	t.Run("reads groups from YAML", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, ".gogo.yaml"),
+			"projects:\n  libs/a: urlA\n  libs/b: urlB\ngroups:\n  foo:\n    - libs/a\n    - libs/b\n")
+
+		result, err := ReadMetaConfig(dir, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"libs/a", "libs/b"}, result.Config.Groups["foo"])
+	})
+
+	t.Run("tolerates a stale group reference until the group is used", func(t *testing.T) {
+		// The referenced project may live in an overlay that is not loaded, so
+		// reading must not fail; using the group must.
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, ".gogo"),
+			`{"projects":{"libs/a":"urlA"},"groups":{"foo":["libs/nope"]}}`)
+
+		result, err := ReadMetaConfig(dir, nil)
+		require.NoError(t, err)
+
+		_, err = ResolveGroups(result.Config, []string{"foo"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown project "libs/nope"`)
+
+		require.Error(t, ValidateReferences(result.Config))
+	})
+
+	t.Run("an overlay may group projects from the base config", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, ".gogo"), `{"projects":{"libs/a":"urlA","libs/b":"urlB"}}`)
+		writeFile(t, filepath.Join(dir, ".gogo.devops"), `{"projects":{},"groups":{"foo":["libs/a"]}}`)
+
+		result, err := ReadMetaConfig(dir, []string{".gogo.devops"})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"libs/a"}, result.Config.Groups["foo"])
+	})
+
+	t.Run("round-trips groups through write and read", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, WriteMetaConfig(dir, groupConfig(), FormatJSON))
+
+		result, err := ReadMetaConfig(dir, nil)
+		require.NoError(t, err)
+		assert.Equal(t, groupConfig().Groups, result.Config.Groups)
+	})
+
+	t.Run("parses command group references", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, ".gogo"),
+			`{"projects":{"libs/a":"urlA"},"groups":{"foo":["libs/a"]},"commands":{"deploy":{"cmd":"make deploy","groups":["foo"]}}}`)
+
+		result, err := ReadMetaConfig(dir, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"foo"}, result.Config.Commands["deploy"].Groups)
+	})
+
+	t.Run("keeps a command with groups an object when marshaled", func(t *testing.T) {
+		data, err := json.Marshal(CommandConfig{Cmd: "make deploy", Groups: []string{"foo"}})
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"cmd":"make deploy","groups":["foo"]}`, string(data))
+	})
+}
+
+func TestMergeConfigsGroups(t *testing.T) {
+	base := MetaConfig{
+		Projects: map[string]string{"a": "urlA"},
+		Groups:   map[string][]string{"foo": {"a"}, "bar": {"a"}},
+	}
+	overlay := MetaConfig{
+		Projects: map[string]string{"b": "urlB"},
+		Groups:   map[string][]string{"foo": {"b"}, "baz": {"b"}},
+	}
+
+	merged := MergeConfigs(base, overlay)
+	assert.Equal(t, []string{"b"}, merged.Groups["foo"], "overlay wins per group name")
+	assert.Equal(t, []string{"a"}, merged.Groups["bar"])
+	assert.Equal(t, []string{"b"}, merged.Groups["baz"])
+
+	t.Run("does not mutate inputs", func(t *testing.T) {
+		assert.Equal(t, []string{"a"}, base.Groups["foo"])
+	})
+
+	t.Run("stays nil when neither side has groups", func(t *testing.T) {
+		merged := MergeConfigs(MetaConfig{Projects: map[string]string{}}, MetaConfig{Projects: map[string]string{}})
+		assert.Nil(t, merged.Groups)
+	})
+}
+
+func TestProjectChangesKeepGroupsConsistent(t *testing.T) {
+	t.Run("AddProject preserves groups", func(t *testing.T) {
+		updated := AddProject(groupConfig(), "libs/e", "urlE")
+		assert.Equal(t, []string{"libs/a", "libs/b"}, updated.Groups["foo"])
+	})
+
+	t.Run("RemoveProject drops the project from groups", func(t *testing.T) {
+		updated := RemoveProject(groupConfig(), "libs/a")
+		assert.Equal(t, []string{"libs/b"}, updated.Groups["foo"])
+		assert.Equal(t, []string{"libs/b", "libs/c"}, updated.Groups["bar"])
+		require.NoError(t, Validate(updated))
+	})
+
+	t.Run("RemoveProject drops groups left empty", func(t *testing.T) {
+		cfg := MetaConfig{
+			Projects: map[string]string{"a": "urlA", "b": "urlB"},
+			Groups:   map[string][]string{"solo": {"a"}, "both": {"a", "b"}},
+		}
+		updated := RemoveProject(cfg, "a")
+		_, ok := updated.Groups["solo"]
+		assert.False(t, ok)
+		assert.Equal(t, []string{"b"}, updated.Groups["both"])
+		require.NoError(t, Validate(updated))
+	})
+}

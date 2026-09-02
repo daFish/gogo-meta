@@ -50,3 +50,23 @@ func TestValidateWorkingCopyAllPresent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "All 1 project directories present")
 }
+
+func TestValidateReportsUnknownGroupProject(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"libs/api":"git@example.com:org/api.git"},"groups":{"foo":["libs/nope"]}}`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "libs", "api"), 0o755))
+
+	var buf bytes.Buffer
+	oldW, oldE := output.Writer, output.ErrWriter
+	output.Writer, output.ErrWriter = &buf, &buf
+	defer func() { output.Writer, output.ErrWriter = oldW, oldE }()
+
+	wd, _ := os.Getwd()
+	require.NoError(t, os.Chdir(dir))
+	defer func() { _ = os.Chdir(wd) }()
+
+	err := runValidate(nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, buf.String(), `group "foo": unknown project "libs/nope"`)
+}

@@ -47,7 +47,7 @@ func runNpmLink(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	filterOpts, err := resolveFilterOptions(cmd)
+	filterOpts, err := resolveFilterOptionsWithConfig(cmd, &configResult.Config)
 	if err != nil {
 		return err
 	}

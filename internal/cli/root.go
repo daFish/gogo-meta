@@ -28,6 +28,7 @@ func NewRootCommand(version string) *cobra.Command {
 
 	pf := rootCmd.PersistentFlags()
 	pf.StringSliceVarP(&overlayFiles, "file", "f", nil, "Additional config file to merge (repeatable)")
+	pf.String("group", "", "Only include projects from the named group(s) in the config (comma-separated)")
 	pf.String("include-only", "", "Only include specified directories (comma-separated)")
 	pf.String("exclude-only", "", "Exclude specified directories (comma-separated)")
 	pf.String("include-pattern", "", "Include directories matching regex pattern")

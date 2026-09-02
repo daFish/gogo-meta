@@ -33,6 +33,7 @@ type CommandConfig struct {
 	Description    string   `json:"description,omitempty" yaml:"description,omitempty"`
 	Parallel       *bool    `json:"parallel,omitempty" yaml:"parallel,omitempty"`
 	Concurrency    *int     `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
+	Groups         []string `json:"groups,omitempty" yaml:"groups,omitempty"`
 	IncludeOnly    []string `json:"includeOnly,omitempty" yaml:"includeOnly,omitempty"`
 	ExcludeOnly    []string `json:"excludeOnly,omitempty" yaml:"excludeOnly,omitempty"`
 	IncludePattern string   `json:"includePattern,omitempty" yaml:"includePattern,omitempty"`
@@ -60,7 +61,7 @@ func (c *CommandConfig) UnmarshalJSON(data []byte) error {
 func (c CommandConfig) MarshalJSON() ([]byte, error) {
 	// If only Cmd is set, marshal as a plain string.
 	if c.Description == "" && c.Parallel == nil && c.Concurrency == nil &&
-		c.IncludeOnly == nil && c.ExcludeOnly == nil &&
+		c.Groups == nil && c.IncludeOnly == nil && c.ExcludeOnly == nil &&
 		c.IncludePattern == "" && c.ExcludePattern == "" {
 		return json.Marshal(c.Cmd)
 	}
@@ -88,7 +89,7 @@ func (c *CommandConfig) UnmarshalYAML(value *yaml.Node) error {
 func (c CommandConfig) MarshalYAML() (any, error) {
 	// If only Cmd is set, marshal as a plain string.
 	if c.Description == "" && c.Parallel == nil && c.Concurrency == nil &&
-		c.IncludeOnly == nil && c.ExcludeOnly == nil &&
+		c.Groups == nil && c.IncludeOnly == nil && c.ExcludeOnly == nil &&
 		c.IncludePattern == "" && c.ExcludePattern == "" {
 		return c.Cmd, nil
 	}
@@ -100,6 +101,7 @@ func (c CommandConfig) MarshalYAML() (any, error) {
 type MetaConfig struct {
 	Projects map[string]string        `json:"projects" yaml:"projects"`
 	Ignore   []string                 `json:"ignore" yaml:"ignore"`
+	Groups   map[string][]string      `json:"groups,omitempty" yaml:"groups,omitempty"`
 	Commands map[string]CommandConfig `json:"commands,omitempty" yaml:"commands,omitempty"`
 }
 
@@ -211,6 +213,19 @@ func Validate(config MetaConfig) error {
 			return fmt.Errorf("invalid project path %q: must be relative and stay within the repository", path)
 		}
 	}
+	for name, paths := range config.Groups {
+		if strings.TrimSpace(name) == "" {
+			return errors.New("group names must not be empty")
+		}
+		if len(paths) == 0 {
+			return fmt.Errorf("group %q: must contain at least one project", name)
+		}
+		for _, path := range paths {
+			if strings.TrimSpace(path) == "" {
+				return fmt.Errorf("group %q: project paths must not be empty", name)
+			}
+		}
+	}
 	for name, cmd := range config.Commands {
 		if cmd.Cmd == "" {
 			return fmt.Errorf("command %q: cmd is required", name)
@@ -218,7 +233,43 @@ func Validate(config MetaConfig) error {
 		if cmd.Concurrency != nil && *cmd.Concurrency <= 0 {
 			return fmt.Errorf("command %q: concurrency must be a positive integer", name)
 		}
+		for _, group := range cmd.Groups {
+			if strings.TrimSpace(group) == "" {
+				return fmt.Errorf("command %q: group names must not be empty", name)
+			}
+		}
 	}
+	return nil
+}
+
+// ValidateReferences checks cross-references within a config: group members
+// must be known projects and commands must reference known groups. It only
+// makes sense for the fully merged config — a single overlay file may well
+// group projects that are defined in the base config, so Validate (which runs
+// per file) does not check this.
+//
+// Reading a config does not apply this check either: a group that references a
+// project living in an overlay that is not loaded should not break unrelated
+// commands. Group references are therefore resolved when they are used (see
+// ResolveGroups, which reports the same problems), and `gogo validate` runs
+// this check over the merged config.
+func ValidateReferences(config MetaConfig) error {
+	for _, name := range GetGroupNames(config) {
+		for _, path := range config.Groups[name] {
+			if _, ok := lookupProject(config, path); !ok {
+				return fmt.Errorf("group %q: unknown project %q", name, path)
+			}
+		}
+	}
+
+	for _, entry := range ListCommands(config) {
+		for _, group := range entry.Command.Groups {
+			if _, ok := config.Groups[group]; !ok {
+				return fmt.Errorf("command %q: unknown group %q", entry.Name, group)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -444,6 +495,18 @@ func MergeConfigs(base, overlay MetaConfig) MetaConfig {
 		}
 	}
 
+	// Merge groups (overlay wins per group name).
+	var groups map[string][]string
+	if base.Groups != nil || overlay.Groups != nil {
+		groups = make(map[string][]string, len(base.Groups)+len(overlay.Groups))
+		for k, v := range base.Groups {
+			groups[k] = append([]string{}, v...)
+		}
+		for k, v := range overlay.Groups {
+			groups[k] = append([]string{}, v...)
+		}
+	}
+
 	// Merge commands (overlay wins).
 	var commands map[string]CommandConfig
 	if base.Commands != nil || overlay.Commands != nil {
@@ -459,6 +522,7 @@ func MergeConfigs(base, overlay MetaConfig) MetaConfig {
 	return MetaConfig{
 		Projects: projects,
 		Ignore:   ignore,
+		Groups:   groups,
 		Commands: commands,
 	}
 }
@@ -481,11 +545,14 @@ func AddProject(config MetaConfig, path, url string) MetaConfig {
 	return MetaConfig{
 		Projects: projects,
 		Ignore:   config.Ignore,
+		Groups:   config.Groups,
 		Commands: config.Commands,
 	}
 }
 
-// RemoveProject returns a new config with a project removed.
+// RemoveProject returns a new config with a project removed. The project is
+// also dropped from every group that referenced it; groups left empty are
+// removed, since an empty group is not a valid config.
 func RemoveProject(config MetaConfig, path string) MetaConfig {
 	projects := make(map[string]string, len(config.Projects))
 	for k, v := range config.Projects {
@@ -493,11 +560,93 @@ func RemoveProject(config MetaConfig, path string) MetaConfig {
 			projects[k] = v
 		}
 	}
+
+	var groups map[string][]string
+	if config.Groups != nil {
+		groups = make(map[string][]string, len(config.Groups))
+		for name, members := range config.Groups {
+			var kept []string
+			for _, member := range members {
+				if member != path {
+					kept = append(kept, member)
+				}
+			}
+			if len(kept) > 0 {
+				groups[name] = kept
+			}
+		}
+	}
+
 	return MetaConfig{
 		Projects: projects,
 		Ignore:   config.Ignore,
+		Groups:   groups,
 		Commands: config.Commands,
 	}
+}
+
+// lookupProject resolves a project reference to its canonical key in
+// config.Projects. It matches the key verbatim first and falls back to a
+// path-cleaned comparison, so "./api" also finds the project "api".
+func lookupProject(config MetaConfig, path string) (string, bool) {
+	if _, ok := config.Projects[path]; ok {
+		return path, true
+	}
+	cleaned := filepath.Clean(path)
+	for key := range config.Projects {
+		if filepath.Clean(key) == cleaned {
+			return key, true
+		}
+	}
+	return "", false
+}
+
+// GetGroupNames returns the sorted group names defined in the config.
+func GetGroupNames(config MetaConfig) []string {
+	names := make([]string, 0, len(config.Groups))
+	for name := range config.Groups {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// GetGroup returns the project paths of a single group.
+func GetGroup(config MetaConfig, name string) ([]string, bool) {
+	members, ok := config.Groups[name]
+	return members, ok
+}
+
+// ResolveGroups resolves group names to the union of their project paths,
+// sorted and deduplicated. An unknown group name is an error listing the
+// groups that are defined.
+func ResolveGroups(config MetaConfig, names []string) ([]string, error) {
+	seen := make(map[string]bool)
+	var paths []string
+
+	for _, name := range names {
+		members, ok := config.Groups[name]
+		if !ok {
+			defined := GetGroupNames(config)
+			if len(defined) == 0 {
+				return nil, fmt.Errorf("unknown group %q. No groups are defined in %s file", name, MetaFile)
+			}
+			return nil, fmt.Errorf("unknown group %q. Available groups: %s", name, strings.Join(defined, ", "))
+		}
+		for _, member := range members {
+			key, ok := lookupProject(config, member)
+			if !ok {
+				return nil, fmt.Errorf("group %q: unknown project %q", name, member)
+			}
+			if !seen[key] {
+				seen[key] = true
+				paths = append(paths, key)
+			}
+		}
+	}
+
+	sort.Strings(paths)
+	return paths, nil
 }
 
 // GetProjectPaths returns sorted project paths from the config.
