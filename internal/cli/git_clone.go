@@ -9,7 +9,6 @@ import (
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/output"
-	"github.com/daFish/gogo-meta/internal/ssh"
 	"github.com/spf13/cobra"
 )
 
@@ -52,7 +51,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("directory %q already exists", repoName)
 	}
 
-	ssh.EnsureSSHHostsKnown(cmd.Context(), newShellExecutor(), []string{url})
+	warnUnverifiedSSHHosts([]string{url})
 
 	output.Info(fmt.Sprintf("Cloning meta repository: %s", url))
 
@@ -94,11 +93,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 	for _, u := range projects {
 		urls = append(urls, u)
 	}
-	_, failedHosts := ssh.EnsureSSHHostsKnown(cmd.Context(), newShellExecutor(), urls)
-
-	if len(failedHosts) > 0 {
-		output.Warning(fmt.Sprintf("Could not verify SSH host keys for: %s. Clone may fail.", joinStrings(failedHosts)))
-	}
+	warnUnverifiedSSHHosts(urls)
 
 	output.Info(fmt.Sprintf("Cloning %d child repositories...", len(projects)))
 
@@ -151,15 +146,4 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 	return nil
-}
-
-func joinStrings(s []string) string {
-	result := ""
-	for i, v := range s {
-		if i > 0 {
-			result += ", "
-		}
-		result += v
-	}
-	return result
 }

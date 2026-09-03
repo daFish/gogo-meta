@@ -4,13 +4,29 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/filter"
 	"github.com/daFish/gogo-meta/internal/loop"
+	"github.com/daFish/gogo-meta/internal/output"
+	"github.com/daFish/gogo-meta/internal/ssh"
 	"github.com/spf13/cobra"
 )
+
+// warnUnverifiedSSHHosts warns about SSH hosts not yet in known_hosts. gogo does
+// not add host keys automatically (that would defeat host-key verification), so
+// the user is told to verify and add them, or let ssh prompt during clone.
+func warnUnverifiedSSHHosts(urls []string) {
+	hosts := ssh.UnverifiedSSHHosts(urls)
+	if len(hosts) == 0 {
+		return
+	}
+	output.Warning(fmt.Sprintf(
+		"Unverified SSH host key(s): %s. gogo does not add host keys automatically; verify and add them with ssh-keyscan, or clone interactively so ssh can prompt. Clone may fail.",
+		strings.Join(hosts, ", ")))
+}
 
 func addFilterFlags(cmd *cobra.Command) {
 	cmd.Flags().String("include-only", "", "Only include specified directories (comma-separated)")

@@ -8,7 +8,6 @@ import (
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/filter"
 	"github.com/daFish/gogo-meta/internal/output"
-	"github.com/daFish/gogo-meta/internal/ssh"
 	"github.com/spf13/cobra"
 )
 
@@ -76,11 +75,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 	for i, m := range missingRepos {
 		urls[i] = m.url
 	}
-	_, failedHosts := ssh.EnsureSSHHostsKnown(cmd.Context(), newShellExecutor(), urls)
-
-	if len(failedHosts) > 0 {
-		output.Warning(fmt.Sprintf("Could not verify SSH host keys for: %s. Clone may fail.", joinStrings(failedHosts)))
-	}
+	warnUnverifiedSSHHosts(urls)
 
 	output.Info(fmt.Sprintf("Cloning %d missing repositories...", len(missingRepos)))
 

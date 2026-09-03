@@ -1,66 +1,13 @@
 package ssh
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type stubExecutor struct {
-	exitCode int
-	gotCmd   string
-	stdout   string
-}
-
-func (s *stubExecutor) Execute(_ context.Context, command string, _ executor.Options) (*executor.Result, error) {
-	s.gotCmd = command
-	return &executor.Result{ExitCode: s.exitCode, Stdout: s.stdout}, nil
-}
-
-func (s *stubExecutor) ExecuteArgs(ctx context.Context, name string, args []string, opts executor.Options) (*executor.Result, error) {
-	return s.Execute(ctx, strings.TrimSpace(name+" "+strings.Join(args, " ")), opts)
-}
-
-func TestAddHostKeyUsesExecutor(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
-
-	ok := &stubExecutor{exitCode: 0, stdout: "example.com ssh-rsa AAAAKEY"}
-	assert.True(t, AddHostKey(context.Background(), ok, "example.com"))
-	assert.Contains(t, ok.gotCmd, "ssh-keyscan")
-	assert.Contains(t, ok.gotCmd, "example.com")
-
-	bad := &stubExecutor{exitCode: 1}
-	assert.False(t, AddHostKey(context.Background(), bad, "example.com"))
-}
-
-func TestAddHostKeyAppendsScannedKey(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
-
-	stub := &stubExecutor{exitCode: 0, stdout: "example.com ssh-rsa AAAAKEY"}
-	ok := AddHostKey(context.Background(), stub, "example.com")
-	require.True(t, ok)
-
-	content, err := os.ReadFile(filepath.Join(home, ".ssh", "known_hosts"))
-	require.NoError(t, err)
-	assert.Contains(t, string(content), "example.com ssh-rsa AAAAKEY")
-}
-
-func TestAddHostKeyFailsOnNonZero(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	stub := &stubExecutor{exitCode: 1}
-	assert.False(t, AddHostKey(context.Background(), stub, "example.com"))
-}
 
 func TestExtractSSHHost(t *testing.T) {
 	tests := []struct {
@@ -97,8 +44,7 @@ func TestExtractUniqueSSHHosts(t *testing.T) {
 	})
 
 	t.Run("returns nil for no SSH URLs", func(t *testing.T) {
-		urls := []string{"https://github.com/org/repo.git"}
-		hosts := ExtractUniqueSSHHosts(urls)
+		hosts := ExtractUniqueSSHHosts([]string{"https://github.com/org/repo.git"})
 		assert.Nil(t, hosts)
 	})
 
@@ -106,4 +52,31 @@ func TestExtractUniqueSSHHosts(t *testing.T) {
 		hosts := ExtractUniqueSSHHosts([]string{})
 		assert.Nil(t, hosts)
 	})
+}
+
+func TestUnverifiedSSHHostsReportsUnknownWithoutWriting(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
+
+	hosts := UnverifiedSSHHosts([]string{"git@github.com:o/r.git"})
+	assert.Equal(t, []string{"github.com"}, hosts)
+
+	_, err := os.Stat(filepath.Join(home, ".ssh", "known_hosts"))
+	assert.True(t, os.IsNotExist(err), "gogo must not add host keys automatically")
+}
+
+func TestUnverifiedSSHHostsSkipsKnownAndNonSSH(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".ssh"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".ssh", "known_hosts"),
+		[]byte("gitlab.com ssh-rsa AAAAKNOWN\n"), 0o600))
+
+	hosts := UnverifiedSSHHosts([]string{
+		"git@gitlab.com:o/r.git",
+		"git@github.com:o/r.git",
+		"https://example.com/o/r.git",
+	})
+	assert.Equal(t, []string{"github.com"}, hosts)
 }
