@@ -360,6 +360,24 @@ func FindFileUp(filename, startDir string) (string, error) {
 // can simulate a config planted by another user.
 var configFileOwner = osConfigFileOwner
 
+// requireOwnedConfig refuses a config file gogo discovered on its own when it is
+// not owned by the current user. It guards every auto-loaded config — the primary
+// one and the .gogo.local overlay beside it — since both may define commands that
+// gogo runs. Overlays named with -f are exempt: the user chose those files.
+func requireOwnedConfig(filePath string) error {
+	owned, ownerUID, err := configFileOwner(filePath)
+	if err != nil {
+		return err
+	}
+	if !owned {
+		return &ConfigError{
+			Message: fmt.Sprintf("refusing to use a .gogo config owned by another user (uid %d); run gogo from a directory you own, or remove this file", ownerUID),
+			Path:    filePath,
+		}
+	}
+	return nil
+}
+
 // FindMetaFileUp searches for a .gogo config file by walking up the directory tree.
 func FindMetaFileUp(startDir string) (string, error) {
 	currentDir, err := filepath.Abs(startDir)
@@ -371,15 +389,8 @@ func FindMetaFileUp(startDir string) (string, error) {
 		for _, candidate := range MetaFileCandidates {
 			filePath := filepath.Join(currentDir, candidate)
 			if FileExists(filePath) {
-				owned, ownerUID, err := configFileOwner(filePath)
-				if err != nil {
+				if err := requireOwnedConfig(filePath); err != nil {
 					return "", err
-				}
-				if !owned {
-					return "", &ConfigError{
-						Message: fmt.Sprintf("refusing to use a .gogo config owned by another user (uid %d); run gogo from a directory you own, or remove this file", ownerUID),
-						Path:    filePath,
-					}
 				}
 				return filePath, nil
 			}
@@ -493,6 +504,9 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 		}
 		localPath := filepath.Join(metaDir, localName)
 		if FileExists(localPath) {
+			if err := requireOwnedConfig(localPath); err != nil {
+				return nil, err
+			}
 			localConfig, err := ReadOverlayConfig(localPath)
 			if err != nil {
 				return nil, err

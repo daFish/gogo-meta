@@ -206,3 +206,34 @@ func TestRunGroupFilterFromCommandConfig(t *testing.T) {
 	assert.NotContains(t, out, output.ArrowSymbol+" c\n")
 	assert.Contains(t, out, "hallo")
 }
+
+// TestGroupSpanningLocalOverlay covers the seam between named groups and the
+// personal .gogo.local overlay: a shared group may name a project that only the
+// overlay declares. Filtering resolves it because the merged config is the
+// effective one, and validate does not report it as unknown because it reads
+// every .gogo* file beside the primary, the overlay included.
+func TestGroupSpanningLocalOverlay(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"), []byte(`{
+	  "projects": {"shared": "urlShared"},
+	  "groups": {"mixed": ["shared", "personal"]}
+	}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"), []byte(`{
+	  "projects": {"personal": "urlPersonal"}
+	}`), 0o644))
+	for _, p := range []string{"shared", "personal"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, p), 0o755))
+	}
+	config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+	initTestChdir(t, dir)
+
+	opts, err := resolveFilterOptions(filterCmd(t, map[string]string{"group": "mixed"}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"personal", "shared"}, opts.GroupOnly,
+		"a group may span the shared config and the local overlay")
+
+	require.NoError(t, runValidate(nil, nil),
+		"an overlay-declared group member is not an unknown project")
+	assert.NotContains(t, buf.String(), "unknown project")
+}
