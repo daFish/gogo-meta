@@ -177,6 +177,8 @@ Groups are named sets of project paths. They are resolved to project paths by
 Group and command cross-references are checked lazily, not while reading a
 config: `Validate` covers a single file structurally, `ResolveGroups` reports
 bad references when a group is actually used, and `config.ValidateReferences`
-checks them across the *merged* config for `gogo validate`. Reading stays
-permissive because an overlay may group projects declared in the base config
-and vice versa.
+checks them for `gogo validate` — against the *merged* config plus every config
+file found in the cwd and next to the primary one, so an overlay that was not
+loaded still counts.
+Reading stays permissive because an overlay may group projects declared in the
+base config and vice versa.
