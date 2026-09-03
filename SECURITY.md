@@ -28,7 +28,10 @@ meta-repositories you trust, and review a cloned or shared `.gogo` (its
 - **Config discovery is ownership-checked.** gogo searches parent directories
   for a `.gogo`, but refuses one that is not owned by the current user, so it
   does not silently adopt a config planted by another user in a shared parent
-  directory (for example `/tmp`).
+  directory (for example `/tmp`). The same check covers the `.gogo.local`
+  overlay gogo auto-loads beside the primary config, since it too may define
+  `commands`. Overlays you name yourself with `-f` are not checked — choosing
+  the file is the trust decision.
 - **SSH host keys are never added automatically.** gogo warns about unknown
   hosts and leaves host-key verification to you (or to `ssh`'s own prompt); it
   does not run `ssh-keyscan` and trust whatever key the network returns.

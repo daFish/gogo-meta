@@ -270,6 +270,8 @@ The ignore destination mirrors the config layer, so personal choices never pollu
 
 > **Note:** the merged config is the effective config — a `.gogo.local` with invalid JSON/YAML makes **every** gogo command fail until you fix or remove the file. gogo fails loudly here on purpose: silently ignoring a broken overlay would run commands against a different project set than you think you have.
 
+Because gogo finds `.gogo.local` on its own, it gets the same ownership check as the primary config: a `.gogo.local` owned by another user is refused rather than merged. See [SECURITY.md](SECURITY.md).
+
 ## Commands
 
 ### Global Options
