@@ -248,6 +248,11 @@ func FindFileUp(filename, startDir string) (string, error) {
 	}
 }
 
+// configFileOwner reports whether a discovered config is owned by the current
+// user, plus the owner uid for diagnostics. It is a package variable so tests
+// can simulate a config planted by another user.
+var configFileOwner = osConfigFileOwner
+
 // FindMetaFileUp searches for a .gogo config file by walking up the directory tree.
 func FindMetaFileUp(startDir string) (string, error) {
 	currentDir, err := filepath.Abs(startDir)
@@ -259,6 +264,16 @@ func FindMetaFileUp(startDir string) (string, error) {
 		for _, candidate := range MetaFileCandidates {
 			filePath := filepath.Join(currentDir, candidate)
 			if FileExists(filePath) {
+				owned, ownerUID, err := configFileOwner(filePath)
+				if err != nil {
+					return "", err
+				}
+				if !owned {
+					return "", &ConfigError{
+						Message: fmt.Sprintf("refusing to use a .gogo config owned by another user (uid %d); run gogo from a directory you own, or remove this file", ownerUID),
+						Path:    filePath,
+					}
+				}
 				return filePath, nil
 			}
 		}
