@@ -5,11 +5,32 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/fatih/color"
 )
+
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
+
+// sanitizeText removes ANSI escape sequences and control characters (except
+// newline and tab) from untrusted text, so a child command's output or a
+// config-supplied project name cannot forge gogo's status lines with carriage
+// returns, cursor moves, or colour codes.
+func sanitizeText(s string) string {
+	s = ansiEscape.ReplaceAllString(s, "")
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
 
 // Writer is the default output destination. Override in tests.
 var Writer io.Writer = os.Stdout
@@ -56,7 +77,7 @@ func Info(message string) {
 }
 
 func Header(directory string) {
-	fmt.Fprintf(Writer, "\n%s %s\n", ArrowSymbol, boldCyanFn(directory))
+	fmt.Fprintf(Writer, "\n%s %s\n", ArrowSymbol, boldCyanFn(sanitizeText(directory)))
 }
 
 func Dim(message string) {
@@ -81,12 +102,14 @@ func ProjectStatus(directory, status, message string) {
 
 	suffix := ""
 	if message != "" {
-		suffix = " " + dimFn(message)
+		suffix = " " + dimFn(sanitizeText(message))
 	}
-	fmt.Fprintf(Writer, "%s %s%s\n", symbol, colorFn(directory), suffix)
+	fmt.Fprintf(Writer, "%s %s%s\n", symbol, colorFn(sanitizeText(directory)), suffix)
 }
 
 func CommandOutput(stdout, stderr string) {
+	stdout = sanitizeText(stdout)
+	stderr = sanitizeText(stderr)
 	if strings.TrimSpace(stdout) != "" {
 		fmt.Fprintln(Writer, stdout)
 	}
