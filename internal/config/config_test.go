@@ -975,7 +975,9 @@ func TestValidateReferencesAgainstAlsoKnown(t *testing.T) {
 	})
 
 	t.Run("passing no extra config keeps the single-config behavior", func(t *testing.T) {
-		assert.Equal(t, ValidateReferences(base), ValidateReferences(base))
+		problems := ValidateReferences(base)
+		require.Len(t, problems, 1)
+		assert.Contains(t, problems[0].Error(), `group "deploy": unknown project "infra/tf"`)
 		assert.Empty(t, ValidateReferences(groupConfig()))
 	})
 }
