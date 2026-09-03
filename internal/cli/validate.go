@@ -116,9 +116,10 @@ func validateWorkingCopy(cwd string) bool {
 	hasErrors := false
 
 	// Group and command cross-references are only meaningful once every config
-	// file has been merged, so they are checked here rather than per file.
-	if err := config.ValidateReferences(result.Config); err != nil {
-		output.Error(err.Error())
+	// file has been merged, so they are checked here rather than per file. Like
+	// the directory check below, every problem is listed at once.
+	for _, problem := range config.ValidateReferences(result.Config) {
+		output.Error(problem.Error())
 		hasErrors = true
 	}
 

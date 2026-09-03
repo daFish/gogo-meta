@@ -338,21 +338,22 @@ gogo run deploy --include-only api
 # Commands can define defaults in .gogo:
 # - parallel: true/false
 # - concurrency: number
+# - groups: array of group names
 # - includeOnly/excludeOnly: array of directories
 # - includePattern/excludePattern: regex patterns
 # CLI flags override these config defaults
 ```
 
-| Option                      | Description                                             |
-| --------------------------- | ------------------------------------------------------- |
-| `-l, --list`                | List all available commands                             |
-| `--group <names>`           | Only target projects of the named group(s)              |
-| `--include-only <dirs>`     | Only run in specified directories (overrides config)    |
-| `--exclude-only <dirs>`     | Skip specified directories (overrides config)           |
-| `--include-pattern <regex>` | Include directories matching pattern (overrides config) |
-| `--exclude-pattern <regex>` | Exclude directories matching pattern (overrides config) |
-| `--parallel`                | Run commands concurrently (overrides config)            |
-| `--concurrency <n>`         | Max parallel processes (overrides config)               |
+| Option                      | Description                                                   |
+| --------------------------- | ------------------------------------------------------------- |
+| `-l, --list`                | List all available commands                                   |
+| `--group <names>`           | Only target projects of the named group(s) (overrides config) |
+| `--include-only <dirs>`     | Only run in specified directories (overrides config)          |
+| `--exclude-only <dirs>`     | Skip specified directories (overrides config)                 |
+| `--include-pattern <regex>` | Include directories matching pattern (overrides config)       |
+| `--exclude-pattern <regex>` | Exclude directories matching pattern (overrides config)       |
+| `--parallel`                | Run commands concurrently (overrides config)                  |
+| `--concurrency <n>`         | Max parallel processes (overrides config)                     |
 
 ---
 
