@@ -7,6 +7,7 @@ import (
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
+	"github.com/daFish/gogo-meta/internal/giturl"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,10 @@ func runProjectCreate(cmd *cobra.Command, args []string) error {
 
 	if !config.IsSafeProjectPath(folder) {
 		return fmt.Errorf("invalid project folder %q: must be relative and stay within the repository", folder)
+	}
+
+	if err := giturl.Validate(url); err != nil {
+		return err
 	}
 
 	metaDir, err := requireMetaDir()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
+	"github.com/daFish/gogo-meta/internal/giturl"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -31,6 +32,12 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 
 	if !config.IsSafeProjectPath(folder) {
 		return fmt.Errorf("invalid project folder %q: must be relative and stay within the repository", folder)
+	}
+
+	if url != "" {
+		if err := giturl.Validate(url); err != nil {
+			return err
+		}
 	}
 
 	metaDir, err := requireMetaDir()
@@ -110,7 +117,7 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		cloneResult, err := exec.ExecuteArgs(ctx, "git", []string{"clone", url, filepath.Base(folder)}, executor.Options{Cwd: parentDir})
+		cloneResult, err := exec.ExecuteArgs(ctx, "git", []string{"clone", "--", url, filepath.Base(folder)}, executor.Options{Cwd: parentDir})
 		if err != nil {
 			return err
 		}
