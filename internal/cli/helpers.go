@@ -92,7 +92,10 @@ func resolveFilterOptionsWithConfig(cmd *cobra.Command, cfg *config.MetaConfig) 
 	}
 
 	if cfg == nil {
-		result, err := resolveConfig()
+		// Plumbing read, not the command's own config load: the caller resolves
+		// the config again and announces the overlays there, so stay quiet to
+		// avoid printing the overlay lines twice.
+		result, err := readConfig()
 		if err != nil {
 			return filter.Options{}, err
 		}
@@ -156,12 +159,19 @@ func printOverlayInfo(result *config.MetaConfigResult) {
 	}
 }
 
-func resolveConfig() (*config.MetaConfigResult, error) {
+// readConfig reads the merged config without printing anything about it.
+func readConfig() (*config.MetaConfigResult, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
-	result, err := config.ReadMetaConfig(cwd, nil)
+	return config.ReadMetaConfig(cwd, nil)
+}
+
+// resolveConfig is readConfig for a command's own config load: it also reports
+// which overlays were merged, and any warning the read produced.
+func resolveConfig() (*config.MetaConfigResult, error) {
+	result, err := readConfig()
 	if err != nil {
 		return nil, err
 	}

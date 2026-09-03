@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -236,4 +237,31 @@ func TestGroupSpanningLocalOverlay(t *testing.T) {
 	require.NoError(t, runValidate(nil, nil),
 		"an overlay-declared group member is not an unknown project")
 	assert.NotContains(t, buf.String(), "unknown project")
+}
+
+// TestGroupFlagAnnouncesOverlayOnce guards the seam where --group made a loop
+// command read the merged config twice: the plumbing read behind the flag must
+// stay quiet, so the overlay banner appears once per command.
+func TestGroupFlagAnnouncesOverlayOnce(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"), []byte(`{
+	  "projects": {"a": "urlA"},
+	  "groups": {"foo": ["a"]}
+	}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"), []byte(`{
+	  "projects": {"b": "urlB"}
+	}`), 0o644))
+	for _, p := range []string{"a", "b"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, p), 0o755))
+	}
+	config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+	initTestChdir(t, dir)
+
+	cmd := newExecCmd()
+	cmd.SetArgs([]string{"--group", "foo", "true"})
+	require.NoError(t, cmd.Execute())
+
+	assert.Equal(t, 1, strings.Count(buf.String(), "Using local overlay config: .gogo.local"),
+		"the overlay banner belongs to the command's own config load, not the filter plumbing")
 }
