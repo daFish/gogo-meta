@@ -691,6 +691,10 @@ make all            # Clean, lint, test-coverage, then build
 └── go.mod
 ```
 
+## Security
+
+gogo runs arbitrary shell commands from the `.gogo` file (`gogo run`) and from the command line (`gogo exec`). Only run gogo in meta-repositories you trust. See [SECURITY.md](SECURITY.md) for the full trust model and the built-in hardening.
+
 ## Requirements
 
 - Go 1.24 or higher
