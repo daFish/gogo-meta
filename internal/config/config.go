@@ -253,11 +253,18 @@ func Validate(config MetaConfig) error {
 // commands. Group references are therefore resolved when they are used (see
 // ResolveGroups, which reports the same problems), and `gogo validate` runs
 // this check over the merged config.
-func ValidateReferences(config MetaConfig) error {
+//
+// Every problem is reported, not just the first, so a config with several
+// stale references does not have to be fixed one round at a time. The result
+// is empty when the config is consistent, and ordered by group and command
+// name.
+func ValidateReferences(config MetaConfig) []error {
+	var problems []error
+
 	for _, name := range GetGroupNames(config) {
 		for _, path := range config.Groups[name] {
 			if _, ok := lookupProject(config, path); !ok {
-				return fmt.Errorf("group %q: unknown project %q", name, path)
+				problems = append(problems, fmt.Errorf("group %q: unknown project %q", name, path))
 			}
 		}
 	}
@@ -265,12 +272,12 @@ func ValidateReferences(config MetaConfig) error {
 	for _, entry := range ListCommands(config) {
 		for _, group := range entry.Command.Groups {
 			if _, ok := config.Groups[group]; !ok {
-				return fmt.Errorf("command %q: unknown group %q", entry.Name, group)
+				problems = append(problems, fmt.Errorf("command %q: unknown group %q", entry.Name, group))
 			}
 		}
 	}
 
-	return nil
+	return problems
 }
 
 func FileExists(path string) bool {
@@ -551,8 +558,9 @@ func AddProject(config MetaConfig, path, url string) MetaConfig {
 }
 
 // RemoveProject returns a new config with a project removed. The project is
-// also dropped from every group that referenced it; groups left empty are
-// removed, since an empty group is not a valid config.
+// also dropped from every group that referenced it; a group left empty is
+// removed (an empty group is not a valid config), and commands referring to
+// such a group lose that reference, so the result never dangles.
 func RemoveProject(config MetaConfig, path string) MetaConfig {
 	projects := make(map[string]string, len(config.Projects))
 	for k, v := range config.Projects {
@@ -562,6 +570,7 @@ func RemoveProject(config MetaConfig, path string) MetaConfig {
 	}
 
 	var groups map[string][]string
+	dropped := make(map[string]bool)
 	if config.Groups != nil {
 		groups = make(map[string][]string, len(config.Groups))
 		for name, members := range config.Groups {
@@ -573,7 +582,24 @@ func RemoveProject(config MetaConfig, path string) MetaConfig {
 			}
 			if len(kept) > 0 {
 				groups[name] = kept
+			} else {
+				dropped[name] = true
 			}
+		}
+	}
+
+	commands := config.Commands
+	if len(dropped) > 0 && commands != nil {
+		commands = make(map[string]CommandConfig, len(config.Commands))
+		for name, cmd := range config.Commands {
+			var keptGroups []string
+			for _, group := range cmd.Groups {
+				if !dropped[group] {
+					keptGroups = append(keptGroups, group)
+				}
+			}
+			cmd.Groups = keptGroups
+			commands[name] = cmd
 		}
 	}
 
@@ -581,7 +607,7 @@ func RemoveProject(config MetaConfig, path string) MetaConfig {
 		Projects: projects,
 		Ignore:   config.Ignore,
 		Groups:   groups,
-		Commands: config.Commands,
+		Commands: commands,
 	}
 }
 
@@ -609,12 +635,6 @@ func GetGroupNames(config MetaConfig) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// GetGroup returns the project paths of a single group.
-func GetGroup(config MetaConfig, name string) ([]string, bool) {
-	members, ok := config.Groups[name]
-	return members, ok
 }
 
 // ResolveGroups resolves group names to the union of their project paths,

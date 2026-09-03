@@ -696,17 +696,8 @@ func TestResolveGroups(t *testing.T) {
 	})
 }
 
-func TestGetGroupNamesAndGetGroup(t *testing.T) {
-	cfg := groupConfig()
-	assert.Equal(t, []string{"bar", "foo"}, GetGroupNames(cfg))
-
-	members, ok := GetGroup(cfg, "foo")
-	assert.True(t, ok)
-	assert.Equal(t, []string{"libs/a", "libs/b"}, members)
-
-	_, ok = GetGroup(cfg, "nope")
-	assert.False(t, ok)
-
+func TestGetGroupNames(t *testing.T) {
+	assert.Equal(t, []string{"bar", "foo"}, GetGroupNames(groupConfig()))
 	assert.Empty(t, GetGroupNames(MetaConfig{Projects: map[string]string{}}))
 }
 
@@ -753,23 +744,46 @@ func TestValidateReferences(t *testing.T) {
 	t.Run("accepts a consistent config", func(t *testing.T) {
 		cfg := groupConfig()
 		cfg.Commands = map[string]CommandConfig{"deploy": {Cmd: "make deploy", Groups: []string{"foo"}}}
-		require.NoError(t, ValidateReferences(cfg))
+		assert.Empty(t, ValidateReferences(cfg))
 	})
 
 	t.Run("rejects group member that is not a project", func(t *testing.T) {
 		cfg := groupConfig()
 		cfg.Groups["broken"] = []string{"libs/missing"}
-		err := ValidateReferences(cfg)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `group "broken": unknown project "libs/missing"`)
+		problems := ValidateReferences(cfg)
+		require.Len(t, problems, 1)
+		assert.Contains(t, problems[0].Error(), `group "broken": unknown project "libs/missing"`)
 	})
 
 	t.Run("rejects command referencing an unknown group", func(t *testing.T) {
 		cfg := groupConfig()
 		cfg.Commands = map[string]CommandConfig{"deploy": {Cmd: "make deploy", Groups: []string{"nope"}}}
-		err := ValidateReferences(cfg)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), `command "deploy": unknown group "nope"`)
+		problems := ValidateReferences(cfg)
+		require.Len(t, problems, 1)
+		assert.Contains(t, problems[0].Error(), `command "deploy": unknown group "nope"`)
+	})
+
+	t.Run("reports every problem, ordered by group and command name", func(t *testing.T) {
+		cfg := groupConfig()
+		cfg.Groups["broken"] = []string{"libs/missing", "libs/gone"}
+		cfg.Groups["also-broken"] = []string{"libs/nowhere"}
+		cfg.Commands = map[string]CommandConfig{
+			"deploy":  {Cmd: "make deploy", Groups: []string{"nope"}},
+			"analyze": {Cmd: "make analyze", Groups: []string{"foo", "missing"}},
+		}
+
+		problems := ValidateReferences(cfg)
+		messages := make([]string, len(problems))
+		for i, problem := range problems {
+			messages[i] = problem.Error()
+		}
+		assert.Equal(t, []string{
+			`group "also-broken": unknown project "libs/nowhere"`,
+			`group "broken": unknown project "libs/missing"`,
+			`group "broken": unknown project "libs/gone"`,
+			`command "analyze": unknown group "missing"`,
+			`command "deploy": unknown group "nope"`,
+		}, messages)
 	})
 }
 
@@ -808,7 +822,7 @@ func TestGroupsInConfigFiles(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `unknown project "libs/nope"`)
 
-		require.Error(t, ValidateReferences(result.Config))
+		assert.NotEmpty(t, ValidateReferences(result.Config))
 	})
 
 	t.Run("an overlay may group projects from the base config", func(t *testing.T) {
@@ -895,5 +909,24 @@ func TestProjectChangesKeepGroupsConsistent(t *testing.T) {
 		assert.False(t, ok)
 		assert.Equal(t, []string{"b"}, updated.Groups["both"])
 		require.NoError(t, Validate(updated))
+	})
+
+	t.Run("RemoveProject leaves no command pointing at a dropped group", func(t *testing.T) {
+		cfg := MetaConfig{
+			Projects: map[string]string{"a": "urlA", "b": "urlB"},
+			Groups:   map[string][]string{"solo": {"a"}, "both": {"a", "b"}},
+			Commands: map[string]CommandConfig{
+				"deploy": {Cmd: "make deploy", Groups: []string{"solo", "both"}},
+				"build":  {Cmd: "make build"},
+			},
+		}
+		updated := RemoveProject(cfg, "a")
+		assert.Equal(t, []string{"both"}, updated.Commands["deploy"].Groups)
+		assert.Empty(t, updated.Commands["build"].Groups)
+		require.NoError(t, Validate(updated))
+		assert.Empty(t, ValidateReferences(updated))
+
+		// The original config is untouched.
+		assert.Equal(t, []string{"solo", "both"}, cfg.Commands["deploy"].Groups)
 	})
 }

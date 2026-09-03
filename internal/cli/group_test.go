@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
+	"github.com/daFish/gogo-meta/internal/filter"
 	"github.com/daFish/gogo-meta/internal/loop"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
@@ -75,6 +77,66 @@ func TestResolveFilterOptionsGroupFlag(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `unknown group "nope"`)
 		assert.Contains(t, err.Error(), "Available groups: bar, foo")
+	})
+}
+
+// TestGroupFlagPositions drives the real command tree the way the binary does,
+// because --group exists twice: as a persistent flag on the root and as a local
+// flag on every filter command. cobra merges the two into the single local flag,
+// so `gogo --group foo exec ...` and `gogo exec --group foo ...` must end up in
+// the same place — and getStringFlag's inherited-flag fallback must not be what
+// this depends on.
+func TestGroupFlagPositions(t *testing.T) {
+	setupGroupRepo(t)
+
+	resolveVia := func(t *testing.T, args ...string) filter.Options {
+		t.Helper()
+		root := NewRootCommand("test")
+		execCmd, _, err := root.Find([]string{"exec"})
+		require.NoError(t, err)
+
+		var got filter.Options
+		execCmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			var err error
+			got, err = resolveFilterOptions(cmd)
+			return err
+		}
+		root.SetArgs(args)
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		require.NoError(t, root.Execute())
+		return got
+	}
+
+	t.Run("before the subcommand", func(t *testing.T) {
+		opts := resolveVia(t, "--group", "foo", "exec", "true")
+		assert.Equal(t, []string{"a", "b"}, opts.GroupOnly)
+	})
+
+	t.Run("after the subcommand", func(t *testing.T) {
+		opts := resolveVia(t, "exec", "--group", "bar", "true")
+		assert.Equal(t, []string{"c"}, opts.GroupOnly)
+	})
+
+	t.Run("comma-separated union in root position", func(t *testing.T) {
+		opts := resolveVia(t, "--group", "foo,bar", "exec", "true")
+		assert.Equal(t, []string{"a", "b", "c"}, opts.GroupOnly)
+	})
+
+	t.Run("no group flag leaves GroupOnly empty", func(t *testing.T) {
+		opts := resolveVia(t, "exec", "true")
+		assert.Empty(t, opts.GroupOnly)
+	})
+
+	t.Run("an unknown group fails the command", func(t *testing.T) {
+		root := NewRootCommand("test")
+		root.SetArgs([]string{"--group", "nope", "exec", "true"})
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+
+		err := root.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `unknown group "nope"`)
 	})
 }
 
