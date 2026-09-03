@@ -107,9 +107,18 @@ type MetaConfig struct {
 
 // MetaConfigResult is the result of reading a meta config file.
 type MetaConfigResult struct {
-	Config  MetaConfig
-	Format  ConfigFormat
-	MetaDir string
+	Config          MetaConfig
+	Format          ConfigFormat
+	MetaDir         string
+	AppliedOverlays []AppliedOverlay
+	LocalProjects   map[string]string
+	Warnings        []string
+}
+
+// AppliedOverlay is an overlay config that was merged into the primary config.
+type AppliedOverlay struct {
+	Name  string
+	Local bool
 }
 
 // ConfigError represents a configuration error with an optional file path.
@@ -156,6 +165,14 @@ func FilenameForFormat(format ConfigFormat) string {
 	}
 	return ".gogo"
 }
+
+// LocalFilenameForPrimary returns the .gogo.local sibling filename for a primary config filename.
+func LocalFilenameForPrimary(primaryFilename string) string {
+	suffix := strings.TrimPrefix(primaryFilename, MetaFile)
+	return MetaFile + ".local" + suffix
+}
+
+var LocalOverlayNames = []string{".gogo.local", ".gogo.local.yaml", ".gogo.local.yml"}
 
 func parseContent(content []byte, format ConfigFormat) (*MetaConfig, error) {
 	var config MetaConfig
@@ -343,6 +360,24 @@ func FindFileUp(filename, startDir string) (string, error) {
 // can simulate a config planted by another user.
 var configFileOwner = osConfigFileOwner
 
+// requireOwnedConfig refuses a config file gogo discovered on its own when it is
+// not owned by the current user. It guards every auto-loaded config — the primary
+// one and the .gogo.local overlay beside it — since both may define commands that
+// gogo runs. Overlays named with -f are exempt: the user chose those files.
+func requireOwnedConfig(filePath string) error {
+	owned, ownerUID, err := configFileOwner(filePath)
+	if err != nil {
+		return err
+	}
+	if !owned {
+		return &ConfigError{
+			Message: fmt.Sprintf("refusing to use a .gogo config owned by another user (uid %d); run gogo from a directory you own, or remove this file", ownerUID),
+			Path:    filePath,
+		}
+	}
+	return nil
+}
+
 // FindMetaFileUp searches for a .gogo config file by walking up the directory tree.
 func FindMetaFileUp(startDir string) (string, error) {
 	currentDir, err := filepath.Abs(startDir)
@@ -354,15 +389,8 @@ func FindMetaFileUp(startDir string) (string, error) {
 		for _, candidate := range MetaFileCandidates {
 			filePath := filepath.Join(currentDir, candidate)
 			if FileExists(filePath) {
-				owned, ownerUID, err := configFileOwner(filePath)
-				if err != nil {
+				if err := requireOwnedConfig(filePath); err != nil {
 					return "", err
-				}
-				if !owned {
-					return "", &ConfigError{
-						Message: fmt.Sprintf("refusing to use a .gogo config owned by another user (uid %d); run gogo from a directory you own, or remove this file", ownerUID),
-						Path:    filePath,
-					}
 				}
 				return filePath, nil
 			}
@@ -462,6 +490,33 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 		}
 	}
 
+	var appliedOverlays []AppliedOverlay
+	var localProjects map[string]string
+	var warnings []string
+
+	if extraOverlayFiles == nil {
+		localName := LocalFilenameForPrimary(filepath.Base(metaPath))
+		for _, name := range LocalOverlayNames {
+			if name != localName && FileExists(filepath.Join(metaDir, name)) {
+				warnings = append(warnings, fmt.Sprintf(
+					"Local overlay %s exists but will not be merged (format differs from the primary config)", name))
+			}
+		}
+		localPath := filepath.Join(metaDir, localName)
+		if FileExists(localPath) {
+			if err := requireOwnedConfig(localPath); err != nil {
+				return nil, err
+			}
+			localConfig, err := ReadOverlayConfig(localPath)
+			if err != nil {
+				return nil, err
+			}
+			localProjects = localConfig.Projects
+			*config = MergeConfigs(*config, *localConfig)
+			appliedOverlays = append(appliedOverlays, AppliedOverlay{Name: localName, Local: true})
+		}
+	}
+
 	// Determine overlay files to merge.
 	filesToMerge := overlayFiles
 	if extraOverlayFiles != nil {
@@ -481,12 +536,16 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 			return nil, err
 		}
 		*config = MergeConfigs(*config, *overlayConfig)
+		appliedOverlays = append(appliedOverlays, AppliedOverlay{Name: overlayRelPath, Local: false})
 	}
 
 	return &MetaConfigResult{
-		Config:  *config,
-		Format:  format,
-		MetaDir: metaDir,
+		Config:          *config,
+		Format:          format,
+		MetaDir:         metaDir,
+		AppliedOverlays: appliedOverlays,
+		LocalProjects:   localProjects,
+		Warnings:        warnings,
 	}, nil
 }
 

@@ -41,3 +41,47 @@ func TestRunLoopCommandRunsAcrossProjects(t *testing.T) {
 	assert.True(t, ran["a"])
 	assert.True(t, ran["b"])
 }
+
+func TestResolveConfigPrintsLocalOverlayInfo(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"),
+		[]byte(`{"projects":{"b":"urlB"}}`), 0o644))
+	config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+	initTestChdir(t, dir)
+
+	result, err := resolveConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "urlB", result.Config.Projects["b"])
+	assert.Contains(t, buf.String(), "Using local overlay config: .gogo.local")
+}
+
+func TestResolveConfigWarnsOnMismatchedLocal(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local.yaml"),
+		[]byte("projects:\n  b: urlB\n"), 0o644))
+	config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+	initTestChdir(t, dir)
+
+	_, err := resolveConfig()
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "will not be merged")
+}
+
+func TestResolveConfigNoOverlayNoInfo(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"a":"urlA"}}`), 0o644))
+	config.SetOverlayFiles(nil)
+	buf := captureOutput(t)
+	initTestChdir(t, dir)
+
+	_, err := resolveConfig()
+	require.NoError(t, err)
+	assert.NotContains(t, buf.String(), "overlay config")
+}

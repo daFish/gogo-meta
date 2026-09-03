@@ -129,6 +129,10 @@ func validateWorkingCopy(cwd string, knownConfigs []config.MetaConfig, reportedF
 		return true
 	}
 
+	for _, w := range result.Warnings {
+		output.Warning(w)
+	}
+
 	hasErrors := false
 
 	// Group and command cross-references are only meaningful once every config

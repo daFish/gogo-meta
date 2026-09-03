@@ -248,6 +248,30 @@ Overlay paths are resolved relative to the directory containing the primary conf
 
 Write commands (`project create`, `project import`) only modify the primary config file — overlay projects are never absorbed into it.
 
+### Personal overlay: `.gogo.local`
+
+A `.gogo.local` file sitting next to the primary config is **auto-merged on every normal command** (no `-f` needed) — think of it like `docker-compose.override.yml`. Its filename follows the primary's format: `.gogo.local` beside a JSON `.gogo`, `.gogo.local.yaml` beside a `.gogo.yaml`. Merge order is **primary → `.gogo.local` → `-f` overlays**.
+
+Use it for personal additions: extra repos only you work with, or a shared template you'd rather not pass with `-f` every time. It is **not** merged by write commands (`project create`, `project import`, `git clone`), so your personal projects never leak into the shared `.gogo`.
+
+#### Two-layer ignore model
+
+The ignore destination mirrors the config layer, so personal choices never pollute the shared repo:
+
+| What | Ignored via |
+|------|-------------|
+| The `.gogo.local` file itself | shared `.gitignore` (like `.env`; each dev keeps their own uncommitted) — added automatically by `gogo init`, `project import`, and `migrate` |
+| Project dirs from the **shared** config (`.gogo`) | shared, tracked `.gitignore` |
+| Project dirs from **`.gogo.local`** | `.git/info/exclude` — git's per-repo, uncommitted ignore; **never shared** |
+
+`gogo git update` auto-adds local-only project directories to `.git/info/exclude`, so a personal repo cloned into the umbrella stays out of `git status` without touching the shared `.gitignore`.
+
+> If a `.gogo.local.*` file exists in a format that doesn't match the primary (e.g. `.gogo.local.yaml` beside a JSON `.gogo`), gogo prints a warning that it will not be merged.
+
+> **Note:** the merged config is the effective config — a `.gogo.local` with invalid JSON/YAML makes **every** gogo command fail until you fix or remove the file. gogo fails loudly here on purpose: silently ignoring a broken overlay would run commands against a different project set than you think you have.
+
+Because gogo finds `.gogo.local` on its own, it gets the same ownership check as the primary config: a `.gogo.local` owned by another user is refused rather than merged. See [SECURITY.md](SECURITY.md).
+
 ## Commands
 
 ### Global Options
