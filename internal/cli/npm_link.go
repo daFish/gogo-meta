@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
@@ -17,6 +18,11 @@ type packageJSON struct {
 	Name            string            `json:"name"`
 	Dependencies    map[string]string `json:"dependencies"`
 	DevDependencies map[string]string `json:"devDependencies"`
+}
+
+type projectInfo struct {
+	path    string
+	pkgJSON packageJSON
 }
 
 func newNpmLinkCmd() *cobra.Command {
@@ -54,11 +60,6 @@ func runNpmLink(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	type projectInfo struct {
-		path    string
-		pkgJSON packageJSON
-	}
-
 	projectPackages := make(map[string]projectInfo)
 	for _, projectPath := range projectPaths {
 		fullPath := filepath.Join(metaDir, projectPath)
@@ -79,46 +80,11 @@ func runNpmLink(cmd *cobra.Command, _ []string) error {
 	allFlag, _ := cmd.Flags().GetBool("all")
 	linkCount := 0
 
-	exec := executor.NewShellExecutor()
-	ctx := cmd.Context()
-
 	if allFlag {
-		for consumerName, consumer := range projectPackages {
-			allDeps := make(map[string]string)
-			for k, v := range consumer.pkgJSON.Dependencies {
-				allDeps[k] = v
-			}
-			for k, v := range consumer.pkgJSON.DevDependencies {
-				allDeps[k] = v
-			}
-
-			for depName := range allDeps {
-				provider, ok := projectPackages[depName]
-				if !ok {
-					continue
-				}
-
-				nodeModulesPath := filepath.Join(consumer.path, "node_modules", depName)
-
-				// Remove existing link/dir.
-				_ = os.RemoveAll(nodeModulesPath)
-
-				parentDir := filepath.Dir(nodeModulesPath)
-				if err := os.MkdirAll(parentDir, 0o755); err != nil {
-					output.Error(fmt.Sprintf("Failed to create symlink: %s -> %s", nodeModulesPath, provider.path))
-					continue
-				}
-
-				if err := os.Symlink(provider.path, nodeModulesPath); err != nil {
-					output.Error(fmt.Sprintf("Failed to create symlink: %s -> %s", nodeModulesPath, provider.path))
-					continue
-				}
-
-				output.ProjectStatus(consumerName, "success", fmt.Sprintf("linked %s", depName))
-				linkCount++
-			}
-		}
+		linkCount = linkAllProjects(projectPackages)
 	} else {
+		exec := executor.NewShellExecutor()
+		ctx := cmd.Context()
 		for pkgName, info := range projectPackages {
 			output.Info(fmt.Sprintf("Creating global link for %s...", pkgName))
 			result, err := exec.ExecuteArgs(ctx, "npm", []string{"link"}, executor.Options{Cwd: info.path})
@@ -137,6 +103,110 @@ func runNpmLink(cmd *cobra.Command, _ []string) error {
 	}
 
 	output.Success(fmt.Sprintf("Created %d links", linkCount))
+	return nil
+}
+
+func linkAllProjects(projectPackages map[string]projectInfo) int {
+	linkCount := 0
+	for consumerName, consumer := range projectPackages {
+		allDeps := make(map[string]string)
+		for k, v := range consumer.pkgJSON.Dependencies {
+			allDeps[k] = v
+		}
+		for k, v := range consumer.pkgJSON.DevDependencies {
+			allDeps[k] = v
+		}
+
+		for depName := range allDeps {
+			provider, ok := projectPackages[depName]
+			if !ok {
+				continue
+			}
+
+			nodeModulesPath, err := safeLinkTarget(consumer.path, depName)
+			if err != nil {
+				output.Error(fmt.Sprintf("Skipping unsafe link for %q: %v", depName, err))
+				continue
+			}
+
+			parentDir := filepath.Dir(nodeModulesPath)
+			if err := ensureRealDirWithin(consumer.path, parentDir); err != nil {
+				output.Error(fmt.Sprintf("Skipping unsafe link for %q: %v", depName, err))
+				continue
+			}
+
+			_ = os.RemoveAll(nodeModulesPath)
+
+			if err := os.Symlink(provider.path, nodeModulesPath); err != nil {
+				output.Error(fmt.Sprintf("Failed to create symlink: %s -> %s", nodeModulesPath, provider.path))
+				continue
+			}
+
+			output.ProjectStatus(consumerName, "success", fmt.Sprintf("linked %s", depName))
+			linkCount++
+		}
+	}
+	return linkCount
+}
+
+// safeLinkTarget resolves depName to a path inside consumerPath/node_modules,
+// rejecting names that are empty, absolute, or contain a ".." segment.
+func safeLinkTarget(consumerPath, depName string) (string, error) {
+	if depName == "" {
+		return "", fmt.Errorf("empty dependency name")
+	}
+	if filepath.IsAbs(depName) {
+		return "", fmt.Errorf("must be a relative name")
+	}
+	for _, segment := range strings.Split(filepath.ToSlash(depName), "/") {
+		if segment == ".." {
+			return "", fmt.Errorf("must not contain a %q path segment", "..")
+		}
+	}
+
+	base := filepath.Join(consumerPath, "node_modules")
+	target := filepath.Join(base, depName)
+
+	rel, err := filepath.Rel(base, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("resolves outside node_modules")
+	}
+	return target, nil
+}
+
+// ensureRealDirWithin creates dir and any missing parents beneath root as real
+// directories, refusing to traverse an existing symlink so a malicious
+// node_modules cannot redirect the later RemoveAll/Symlink outside the tree.
+func ensureRealDirWithin(root, dir string) error {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path %q escapes %q", dir, root)
+	}
+
+	current := root
+	for _, segment := range strings.Split(rel, string(filepath.Separator)) {
+		if segment == "." || segment == "" {
+			continue
+		}
+		current = filepath.Join(current, segment)
+
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				if err := os.Mkdir(current, 0o755); err != nil {
+					return err
+				}
+				continue
+			}
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to follow symlink at %q", current)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("%q is not a directory", current)
+		}
+	}
 	return nil
 }
 
