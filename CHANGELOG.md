@@ -71,6 +71,33 @@ from the `projects` map in `.gogo`. `gogo validate` also no longer validates
 
 * add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
 
+## [3.1.0](https://github.com/daFish/gogo-meta/compare/v3.0.1...v3.1.0) (2026-09-03)
+
+
+### Features
+
+* add project groups and --group filter ([cc2cfcd](https://github.com/daFish/gogo-meta/commit/cc2cfcd11dae9a3f97d7b3d737f9b366156adf4d))
+
+
+### Bug Fixes
+
+* **config:** refuse .gogo config owned by another user ([b57d55e](https://github.com/daFish/gogo-meta/commit/b57d55ee1a3382c439e33bb9aa3d00a012adb1a2)), closes [#59](https://github.com/daFish/gogo-meta/issues/59)
+* **giturl:** validate git URLs before handing them to git ([68eecfa](https://github.com/daFish/gogo-meta/commit/68eecfa7d8a216f5544a9b10a79c25a05ce9d21a)), closes [#63](https://github.com/daFish/gogo-meta/issues/63)
+* **npm:** prevent path escapes in `npm link --all` ([9e9b237](https://github.com/daFish/gogo-meta/commit/9e9b237cf2b74e4b1c088797fae41329eb13afad)), closes [#58](https://github.com/daFish/gogo-meta/issues/58)
+* **output:** strip control characters from untrusted terminal text ([51d61c7](https://github.com/daFish/gogo-meta/commit/51d61c719e5a8872ae899618b9be35ad22904757)), closes [#65](https://github.com/daFish/gogo-meta/issues/65)
+* **ssh:** stop auto-adding scanned host keys to known_hosts ([2d66c40](https://github.com/daFish/gogo-meta/commit/2d66c400b99e58a1aa730ac156c60b3bacd217cd)), closes [#60](https://github.com/daFish/gogo-meta/issues/60) [#64](https://github.com/daFish/gogo-meta/issues/64)
+* **validate:** resolve group references against all discovered config files ([0133dc4](https://github.com/daFish/gogo-meta/commit/0133dc4bb830b0373d1c21d97fc49a3778b260c6))
+
+
+### Code Refactoring
+
+* address review feedback on project groups ([9b555ad](https://github.com/daFish/gogo-meta/commit/9b555ada0f5be1623c3492d904b6853851477470))
+
+
+### Documentation
+
+* **security:** document the trust model for gogo run/exec ([cfeed44](https://github.com/daFish/gogo-meta/commit/cfeed445001f0dff89807e5ed2b79922a24ed7c1)), closes [#61](https://github.com/daFish/gogo-meta/issues/61)
+
 ## [3.0.1](https://github.com/daFish/gogo-meta/compare/v3.0.0...v3.0.1) (2026-09-02)
 
 
