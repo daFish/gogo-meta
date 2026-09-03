@@ -1,14 +1,10 @@
 package ssh
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/daFish/gogo-meta/internal/executor"
-	"github.com/daFish/gogo-meta/internal/output"
 )
 
 var (
@@ -78,48 +74,17 @@ func IsHostKnown(host string) bool {
 	return false
 }
 
-// AddHostKey scans host's SSH key with ssh-keyscan (argv, no shell) and appends
-// it to known_hosts. Returns true if a key was obtained and written.
-func AddHostKey(ctx context.Context, exec executor.Executor, host string) bool {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return false
-	}
-	knownHostsPath := filepath.Join(home, ".ssh", "known_hosts")
-
-	result, err := exec.ExecuteArgs(ctx, "ssh-keyscan", []string{"-H", host}, executor.Options{})
-	if err != nil || result.ExitCode != 0 || result.Stdout == "" {
-		return false
-	}
-
-	f, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = f.Close() }()
-
-	if _, err := f.WriteString(result.Stdout + "\n"); err != nil {
-		return false
-	}
-	return true
-}
-
-// EnsureSSHHostsKnown ensures all SSH hosts for the given URLs are in known_hosts.
-func EnsureSSHHostsKnown(ctx context.Context, exec executor.Executor, urls []string) (added, failed []string) {
-	hosts := ExtractUniqueSSHHosts(urls)
-
-	for _, host := range hosts {
+// UnverifiedSSHHosts returns the SSH hosts referenced by urls that are not yet
+// present in the user's known_hosts. gogo deliberately never adds host keys
+// automatically: scanning and trusting whatever key the network returns would
+// defeat SSH's host-key verification. Callers should warn the user and let them
+// verify and add the keys, or let ssh prompt during clone.
+func UnverifiedSSHHosts(urls []string) []string {
+	var unverified []string
+	for _, host := range ExtractUniqueSSHHosts(urls) {
 		if !IsHostKnown(host) {
-			output.Info("Adding SSH host key for " + host + "...")
-			if AddHostKey(ctx, exec, host) {
-				output.Success("Added host key for " + host)
-				added = append(added, host)
-			} else {
-				output.Error("Failed to add host key for " + host)
-				failed = append(failed, host)
-			}
+			unverified = append(unverified, host)
 		}
 	}
-
-	return added, failed
+	return unverified
 }
