@@ -169,3 +169,29 @@ func TestBold(t *testing.T) {
 	result := Bold("bold text")
 	assert.Contains(t, result, "bold text")
 }
+
+func TestProjectStatusStripsControlCharacters(t *testing.T) {
+	stdout, _ := captureOutput(func() {
+		ProjectStatus("evil\r\x1b[32m fake-success", "error", "boom\x1b[2K")
+	})
+	assert.NotContains(t, stdout, "\r")
+	assert.NotContains(t, stdout, "\x1b")
+	assert.Contains(t, stdout, "evil")
+}
+
+func TestHeaderStripsControlCharacters(t *testing.T) {
+	stdout, _ := captureOutput(func() {
+		Header("proj\r\x1b[2Kfake")
+	})
+	assert.NotContains(t, stdout, "\r")
+	assert.NotContains(t, stdout, "\x1b")
+}
+
+func TestCommandOutputStripsControlCharacters(t *testing.T) {
+	stdout, stderr := captureOutput(func() {
+		CommandOutput("line\rFAKE\x1b[2K", "err\x1b[31mred")
+	})
+	assert.NotContains(t, stdout, "\r")
+	assert.NotContains(t, stdout, "\x1b")
+	assert.NotContains(t, stderr, "\x1b")
+}
