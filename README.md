@@ -214,9 +214,11 @@ Rules:
 - Predefined commands can name their groups via `groups` (see `migrate` above).
   A `--group` flag on the command line replaces the groups from the config.
 - An unknown group name, or a group listing a project that is not configured,
-  is reported when the group is used; `gogo validate` checks every group of the
-  merged config up front. A group referring to a project from an overlay that
-  is not loaded therefore does not get in the way of unrelated commands.
+  is reported when the group is used, so a group referring to a project from an
+  overlay that is not loaded does not get in the way of unrelated commands.
+  `gogo validate` checks every group up front and resolves the members against
+  every config file it finds — in the current directory and next to the primary
+  config — whether or not they were loaded.
 
 ### Multiple Config Files
 
@@ -238,7 +240,9 @@ Overlay files follow the same format as the primary config (JSON or YAML). When 
 - **Commands**: overlay entries are added; on key conflict the overlay wins
 
 A group in an overlay may list projects defined in the base config, and vice
-versa — group members are only ever checked against the merged configuration.
+versa. At runtime group members are checked against the merged configuration;
+`gogo validate` checks them against every config file it finds, so a split that
+only resolves with `-f` still validates without it.
 
 Overlay paths are resolved relative to the directory containing the primary config file.
 

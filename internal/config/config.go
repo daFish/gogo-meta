@@ -243,27 +243,38 @@ func Validate(config MetaConfig) error {
 }
 
 // ValidateReferences checks cross-references within a config: group members
-// must be known projects and commands must reference known groups. It only
-// makes sense for the fully merged config — a single overlay file may well
-// group projects that are defined in the base config, so Validate (which runs
-// per file) does not check this.
+// must be known projects and commands must reference known groups. Validate,
+// which runs per file, does not cover this — a single overlay file may well
+// group projects that are defined in the base config.
 //
-// Reading a config does not apply this check either: a group that references a
+// Reading a config does not apply the check either: a group that references a
 // project living in an overlay that is not loaded should not break unrelated
 // commands. Group references are therefore resolved when they are used (see
 // ResolveGroups, which reports the same problems), and `gogo validate` runs
-// this check over the merged config.
+// this check up front.
+//
+// References resolve against config plus alsoKnown. `gogo validate` fills
+// alsoKnown with the config files sitting next to the primary one whether or
+// not they were loaded, so a group naming a project that only an unloaded
+// overlay declares is not reported as broken. Only the project paths and group
+// names of alsoKnown are consulted — their group members and commands take no
+// part in the check.
 //
 // Every problem is reported, not just the first, so a config with several
 // stale references does not have to be fixed one round at a time. The result
 // is empty when the config is consistent, and ordered by group and command
 // name.
-func ValidateReferences(config MetaConfig) []error {
+func ValidateReferences(config MetaConfig, alsoKnown ...MetaConfig) []error {
 	var problems []error
+
+	known := config
+	if len(alsoKnown) > 0 {
+		known = knownRefs(append([]MetaConfig{config}, alsoKnown...))
+	}
 
 	for _, name := range GetGroupNames(config) {
 		for _, path := range config.Groups[name] {
-			if _, ok := lookupProject(config, path); !ok {
+			if _, ok := lookupProject(known, path); !ok {
 				problems = append(problems, fmt.Errorf("group %q: unknown project %q", name, path))
 			}
 		}
@@ -271,13 +282,34 @@ func ValidateReferences(config MetaConfig) []error {
 
 	for _, entry := range ListCommands(config) {
 		for _, group := range entry.Command.Groups {
-			if _, ok := config.Groups[group]; !ok {
+			if _, ok := known.Groups[group]; !ok {
 				problems = append(problems, fmt.Errorf("command %q: unknown group %q", entry.Name, group))
 			}
 		}
 	}
 
 	return problems
+}
+
+// knownRefs collects what references may resolve to: every project path and
+// every group name of the given configs. Group members are deliberately not
+// merged — which projects a group contains is read from the config under
+// check, never from the extra ones, so an overlay redefining a group cannot
+// change what that group is validated against.
+func knownRefs(configs []MetaConfig) MetaConfig {
+	known := MetaConfig{
+		Projects: make(map[string]string),
+		Groups:   make(map[string][]string),
+	}
+	for _, cfg := range configs {
+		for path, url := range cfg.Projects {
+			known.Projects[path] = url
+		}
+		for name := range cfg.Groups {
+			known.Groups[name] = nil
+		}
+	}
+	return known
 }
 
 func FileExists(path string) bool {

@@ -930,3 +930,52 @@ func TestProjectChangesKeepGroupsConsistent(t *testing.T) {
 		assert.Equal(t, []string{"solo", "both"}, cfg.Commands["deploy"].Groups)
 	})
 }
+
+func TestValidateReferencesAgainstAlsoKnown(t *testing.T) {
+	base := MetaConfig{
+		Projects: map[string]string{"api": "urlA"},
+		Groups:   map[string][]string{"deploy": {"infra/tf"}},
+	}
+	overlay := MetaConfig{
+		Projects: map[string]string{"infra/tf": "urlT"},
+		Groups:   map[string][]string{"infra": {"infra/tf"}},
+	}
+
+	t.Run("a group member declared by an extra config is accepted", func(t *testing.T) {
+		assert.NotEmpty(t, ValidateReferences(base))
+		assert.Empty(t, ValidateReferences(base, overlay))
+	})
+
+	t.Run("a command group declared by an extra config is accepted", func(t *testing.T) {
+		cfg := MetaConfig{
+			Projects: map[string]string{"api": "urlA"},
+			Commands: map[string]CommandConfig{"deploy": {Cmd: "make deploy", Groups: []string{"infra"}}},
+		}
+		assert.NotEmpty(t, ValidateReferences(cfg))
+		assert.Empty(t, ValidateReferences(cfg, overlay))
+	})
+
+	t.Run("a reference no config satisfies is still reported", func(t *testing.T) {
+		problems := ValidateReferences(base, MetaConfig{Projects: map[string]string{"other": "urlO"}})
+		require.Len(t, problems, 1)
+		assert.Contains(t, problems[0].Error(), `group "deploy": unknown project "infra/tf"`)
+	})
+
+	t.Run("extra configs do not redefine the members of a group under check", func(t *testing.T) {
+		// The overlay's "deploy" is consistent, the base's is not. Which
+		// projects "deploy" contains must be read from the config under check,
+		// so the broken member is still reported.
+		shadowing := MetaConfig{
+			Projects: map[string]string{"api": "urlA"},
+			Groups:   map[string][]string{"deploy": {"api"}},
+		}
+		problems := ValidateReferences(base, shadowing)
+		require.Len(t, problems, 1)
+		assert.Contains(t, problems[0].Error(), `unknown project "infra/tf"`)
+	})
+
+	t.Run("passing no extra config keeps the single-config behavior", func(t *testing.T) {
+		assert.Equal(t, ValidateReferences(base), ValidateReferences(base))
+		assert.Empty(t, ValidateReferences(groupConfig()))
+	})
+}
