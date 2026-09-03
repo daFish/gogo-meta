@@ -7,6 +7,7 @@ import (
 
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/filter"
+	"github.com/daFish/gogo-meta/internal/giturl"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -86,6 +87,12 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 	failCount := 0
 
 	for _, m := range missingRepos {
+		if err := giturl.Validate(m.url); err != nil {
+			output.ProjectStatus(m.path, "error", err.Error())
+			failCount++
+			continue
+		}
+
 		projectDir := filepath.Join(metaDir, m.path)
 		parentDir := filepath.Dir(projectDir)
 
@@ -95,7 +102,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 			continue
 		}
 
-		result, err := exec.ExecuteArgs(ctx, "git", []string{"clone", m.url, filepath.Base(m.path)}, executor.Options{Cwd: parentDir})
+		result, err := exec.ExecuteArgs(ctx, "git", []string{"clone", "--", m.url, filepath.Base(m.path)}, executor.Options{Cwd: parentDir})
 		if err != nil {
 			output.ProjectStatus(m.path, "error", err.Error())
 			failCount++

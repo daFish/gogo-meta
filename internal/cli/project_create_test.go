@@ -12,3 +12,9 @@ func TestProjectCreateRejectsUnsafeFolder(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid project folder")
 }
+
+func TestProjectCreateRejectsUnsafeURL(t *testing.T) {
+	err := runProjectCreate(nil, []string{"safe-folder", "ext::sh -c 'touch /tmp/x'"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "git URL")
+}

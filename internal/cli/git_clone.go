@@ -8,6 +8,7 @@ import (
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
+	"github.com/daFish/gogo-meta/internal/giturl"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -51,6 +52,10 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("directory %q already exists", repoName)
 	}
 
+	if err := giturl.Validate(url); err != nil {
+		return err
+	}
+
 	warnUnverifiedSSHHosts([]string{url})
 
 	output.Info(fmt.Sprintf("Cloning meta repository: %s", url))
@@ -58,7 +63,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 	exec := executor.NewShellExecutor()
 	ctx := cmd.Context()
 
-	cloneResult, err := exec.ExecuteArgs(ctx, "git", []string{"clone", url, repoName}, executor.Options{Cwd: cwd})
+	cloneResult, err := exec.ExecuteArgs(ctx, "git", []string{"clone", "--", url, repoName}, executor.Options{Cwd: cwd})
 	if err != nil {
 		return err
 	}
@@ -101,6 +106,12 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 	failCount := 0
 
 	for projectPath, projectURL := range projects {
+		if err := giturl.Validate(projectURL); err != nil {
+			output.ProjectStatus(projectPath, "error", err.Error())
+			failCount++
+			continue
+		}
+
 		projectDir := filepath.Join(targetDir, projectPath)
 
 		if _, err := os.Stat(projectDir); err == nil {
@@ -116,7 +127,7 @@ func runGitClone(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		result, err := exec.ExecuteArgs(ctx, "git", []string{"clone", projectURL, filepath.Base(projectPath)}, executor.Options{Cwd: parentDir})
+		result, err := exec.ExecuteArgs(ctx, "git", []string{"clone", "--", projectURL, filepath.Base(projectPath)}, executor.Options{Cwd: parentDir})
 		if err != nil {
 			output.ProjectStatus(projectPath, "error", err.Error())
 			failCount++
