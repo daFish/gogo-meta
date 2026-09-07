@@ -96,4 +96,16 @@ docker_manifests:
       - 'ghcr.io/dafish/gogo-meta:{{ .Version }}-arm64'
 
 release:
+  # release-please creates the release as a draft and force-creates the tag.
+  # GoReleaser adopts that draft, uploads the artifacts and publishes it last.
+  # GitHub seals an immutable release the moment it is published, so assets
+  # must be attached while it is still a draft.
+  use_existing_draft: true
+  # The draft is matched by release name, which must equal the tag.
+  name_template: '{{ .Tag }}'
   mode: append
+  # A failed run leaves a mutable draft, so the job can be re-run; without
+  # this, re-uploading an artifact that made it through the first time 422s.
+  replace_existing_artifacts: true
+  preflight:
+    fail_on_error: true
