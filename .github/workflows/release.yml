@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     permissions:
       contents: write
       pull-requests: write
@@ -29,6 +30,10 @@ jobs:
   # merged a release PR and created the tag/release. A release-please tag made
   # with GITHUB_TOKEN does not trigger a separate on:push:tags workflow, so
   # goreleaser must run in this same run, gated on release_created.
+  #
+  # release-please leaves the release as a draft; goreleaser attaches the
+  # artifacts and publishes it, which is the only order GitHub's immutable
+  # releases allow.
   goreleaser:
     name: Build & Push Binaries + Image
     needs: release
@@ -57,15 +62,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Latest tag
-        id: tag
-        run: echo "ref=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
-
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
         with:
           version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ steps.tag.outputs.ref }}
+          GORELEASER_CURRENT_TAG: ${{ needs.release.outputs.tag_name }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
