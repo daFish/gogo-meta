@@ -41,12 +41,19 @@ homebrew_casks:
     directory: Casks
     homepage: 'https://github.com/daFish/gogo-meta'
     description: 'Run commands across multiple Git repositories at once'
+    # Homebrew 6 deprecated the `postflight` stanza that `hooks.post.install`
+    # emits, so the quarantine cleanup is written as `postflight_steps` here
+    # until goreleaser can emit it itself (goreleaser/goreleaser#6873).
+    # `chdir: "."` resolves to the staged path, which keeps Homebrew's own
+    # `{{ }}` tokens out of the goreleaser template.
     custom_block: |
       depends_on macos: :monterey
-    hooks:
-      post:
-        install: |
-          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/gogo"] if OS.mac?
+
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "gogo"], chdir: "."
+        end
+      end
     commit_author:
       name: 'github-actions[bot]'
       email: '41898282+github-actions[bot]@users.noreply.github.com'
