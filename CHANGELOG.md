@@ -71,6 +71,13 @@ from the `projects` map in `.gogo`. `gogo validate` also no longer validates
 
 * add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
 
+## [3.1.1](https://github.com/daFish/gogo-meta/compare/v3.1.0...v3.1.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **ci:** attach release artifacts before the release is published ([e5ef699](https://github.com/daFish/gogo-meta/commit/e5ef699a3d88059e65f5bcfc1246bc87b5a301d0))
+
 ## [3.1.0](https://github.com/daFish/gogo-meta/compare/v3.0.1...v3.1.0) (2026-09-07)
 
 
