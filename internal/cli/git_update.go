@@ -16,6 +16,7 @@ func newGitUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Clone missing repositories",
+		Args:  cobra.NoArgs,
 		RunE:  runGitUpdate,
 	}
 	addFilterFlags(cmd)
