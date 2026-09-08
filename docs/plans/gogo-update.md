@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| Status | Phase 0 implemented 2026-09-08 (not yet committed); Decisions 1 and 11 settled; Phase 1 proposed |
+| Status | Phases 0 and 1 implemented 2026-09-08; Decisions 1, 11 and 12 settled; Phase 2 proposed |
 | Target release | 3.2.0 (`feat`) after the Phase 0 fixes ship as patches |
 | Baseline | v3.1.1, `main` at 93f1224 |
 | Scope | New top-level command that converges the working copy on the config in one run: move renamed projects, clone missing ones, fast-forward the rest. Plus four prerequisite fixes in existing commands. |
@@ -554,6 +554,19 @@ written:
 
 1.1 and 1.2 can be reviewed as separate commits inside the PR; 1.3 depends on both and on Phase 0.2.
 
+**Implementation note (2026-09-08).** Phase 1 is implemented and verified end-to-end against real
+git repositories: a working copy with one misplaced project, one missing project and one project
+behind its upstream converges in a single `gogo update`, and a second run is a no-op. The pull
+policy was confirmed against real repositories too — a diverged project is refused, a dirty working
+tree whose changes do not overlap is fast-forwarded with the work in progress intact, and a detached
+HEAD is skipped without failing the run.
+
+Two deviations from the design as written:
+
+- `output.ProjectStatus` renders only success and error (`output.go:91-108`), so *skipped* outcomes
+  are printed with `output.Warning`, matching how `gogo migrate` already reports missing projects.
+- Open question 12 turned out to be load-bearing rather than cosmetic; see its resolution above.
+
 ### Phase 2 — follow-ups (each optional, each its own design note)
 
 | # | Item | Depends on |
@@ -783,8 +796,14 @@ New messages introduced by `gogo update` are the ones listed in §3.4. `gogo git
 11. ~~**`gogo migrate` exit code for missing projects**~~ — **RESOLVED 2026-09-08: keep 1.** The
     existing contract stands; `gogo update` owning the missing case does not change what
     `gogo migrate` reports. Phase 0.3 is therefore a `--dry-run` parity fix only.
-12. **Output for an unborn branch** (`# branch.oid (initial)` with an upstream): `rev-list HEAD...@{u}`
-    fails because `HEAD` has no commit. Treat as `behind` and attempt the fast-forward, or skip?
+12. ~~**Output for an unborn branch**~~ — **RESOLVED 2026-09-08 by experiment: fast-forward without
+    comparing.** Against real git, an unborn branch that has an upstream (clone of a then-empty
+    remote, remote since gained commits) behaves as follows: `git rev-list --left-right --count
+    HEAD...@{u}` fails with exit 128 (`fatal: bad revision 'HEAD...'`), while `git merge --ff-only
+    @{u}` succeeds and checks the files out. `pullProject` therefore skips `AheadBehind` when
+    `Status.Unborn()` and goes straight to the fast-forward; comparing first would leave such a
+    repository permanently unconverged. Covered by the `unborn branch fast-forwards without
+    comparing` case in `TestUpdatePullPolicy`.
 
 ---
 
