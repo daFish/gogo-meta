@@ -22,6 +22,16 @@ const (
 )
 
 type migrateMove struct{ from, to string }
+
+// migrationPlan buckets every selected project by what the working copy needs
+// doing to it. A project appears in exactly one bucket.
+type migrationPlan struct {
+	present   []string // directory exists and its origin matches the config
+	moves     []migrateMove
+	missing   []string // no directory, and the URL was found nowhere
+	ambiguous []string // no directory, and the URL was found at two or more paths
+	conflicts []migrateConflict
+}
 type migrateConflict struct {
 	path  string
 	found string // "" means no remote
@@ -105,6 +115,79 @@ func pruneEmptyParents(metaDir, movedFrom string) {
 	}
 }
 
+// planMigration classifies every selected project against the working copy. It
+// only inspects; nothing is moved.
+func planMigration(ctx context.Context, ex executor.Executor, metaDir string, cfg config.MetaConfig, selected []string) (migrationPlan, error) {
+	urlToPath, ambiguousURLs, err := mapURLsToCurrentPaths(ctx, ex, metaDir, cfg.Ignore)
+	if err != nil {
+		return migrationPlan{}, err
+	}
+
+	var plan migrationPlan
+	for _, projectPath := range selected {
+		url := cfg.Projects[projectPath]
+		targetDir := filepath.Join(metaDir, projectPath)
+
+		if config.FileExists(targetDir) {
+			targetRemote := getRemoteURL(ctx, ex, targetDir)
+			if targetRemote != url {
+				plan.conflicts = append(plan.conflicts, migrateConflict{path: projectPath, found: targetRemote})
+				continue
+			}
+			plan.present = append(plan.present, projectPath)
+			continue
+		}
+
+		switch {
+		case ambiguousURLs[url]:
+			plan.ambiguous = append(plan.ambiguous, projectPath)
+		case urlToPath[url] != "" && urlToPath[url] != projectPath:
+			plan.moves = append(plan.moves, migrateMove{from: urlToPath[url], to: projectPath})
+		default:
+			plan.missing = append(plan.missing, projectPath)
+		}
+	}
+	return plan, nil
+}
+
+// applyMoves renames each working copy to its configured path and keeps the
+// ignore files in step. It returns the moves it completed, stopping at the
+// first filesystem error so the caller can report what did happen.
+func applyMoves(metaDir string, moves []migrateMove, localProjects map[string]string) ([]migrateMove, error) {
+	var applied []migrateMove
+
+	for _, m := range moves {
+		targetDir := filepath.Join(metaDir, m.to)
+		if err := os.MkdirAll(filepath.Dir(targetDir), 0o755); err != nil {
+			return applied, err
+		}
+		if err := os.Rename(filepath.Join(metaDir, m.from), targetDir); err != nil {
+			return applied, err
+		}
+		pruneEmptyParents(metaDir, m.from)
+
+		if _, isLocal := localProjects[m.to]; !isLocal {
+			if _, err := config.RemoveFromGitignore(metaDir, m.from); err != nil {
+				return applied, err
+			}
+			if _, err := config.AddToGitignore(metaDir, m.to); err != nil {
+				return applied, err
+			}
+		}
+		applied = append(applied, m)
+	}
+
+	if len(applied) > 0 {
+		if err := ensureLocalConfigIgnored(metaDir); err != nil {
+			return applied, err
+		}
+		if err := syncLocalExcludes(metaDir, localProjects); err != nil {
+			return applied, err
+		}
+	}
+	return applied, nil
+}
+
 func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bool) (int, error) {
 	metaDir, err := config.GetMetaDir(cwd)
 	if err != nil {
@@ -119,17 +202,11 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 		return 0, err
 	}
 	cfg := result.Config
-
 	localProjects := result.LocalProjects
 
 	if len(cfg.Projects) == 0 {
 		output.Success("Working copy already matches configuration")
 		return 0, nil
-	}
-
-	urlToPath, ambiguousURLs, err := mapURLsToCurrentPaths(ctx, ex, metaDir, cfg.Ignore)
-	if err != nil {
-		return 0, err
 	}
 
 	desired := make([]string, 0, len(cfg.Projects))
@@ -138,34 +215,13 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 	}
 	sort.Strings(desired)
 
-	var moves []migrateMove
-	var missing, ambiguous []string
-	var conflicts []migrateConflict
-
-	for _, projectPath := range desired {
-		url := cfg.Projects[projectPath]
-		targetDir := filepath.Join(metaDir, projectPath)
-
-		if config.FileExists(targetDir) {
-			targetRemote := getRemoteURL(ctx, ex, targetDir)
-			if targetRemote != url {
-				conflicts = append(conflicts, migrateConflict{path: projectPath, found: targetRemote})
-			}
-			continue
-		}
-
-		switch {
-		case ambiguousURLs[url]:
-			ambiguous = append(ambiguous, projectPath)
-		case urlToPath[url] != "" && urlToPath[url] != projectPath:
-			moves = append(moves, migrateMove{from: urlToPath[url], to: projectPath})
-		default:
-			missing = append(missing, projectPath)
-		}
+	plan, err := planMigration(ctx, ex, metaDir, cfg, desired)
+	if err != nil {
+		return 0, err
 	}
 
-	if len(conflicts) > 0 {
-		for _, c := range conflicts {
+	if len(plan.conflicts) > 0 {
+		for _, c := range plan.conflicts {
 			found := c.found
 			if found == "" {
 				found = "no remote"
@@ -175,56 +231,37 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 		return 0, errors.New(migrationAbortedMsg) //nolint:staticcheck // capitalized for JS parity
 	}
 
-	if len(moves) == 0 && len(missing) == 0 && len(ambiguous) == 0 {
+	if len(plan.moves) == 0 && len(plan.missing) == 0 && len(plan.ambiguous) == 0 {
 		output.Success("Working copy already matches configuration")
 		return 0, nil
 	}
 
-	for _, m := range moves {
-		if dryRun {
+	if dryRun {
+		for _, m := range plan.moves {
 			output.Info(fmt.Sprintf("Would move %s → %s", m.from, m.to))
-			continue
 		}
-		targetDir := filepath.Join(metaDir, m.to)
-		if err := os.MkdirAll(filepath.Dir(targetDir), 0o755); err != nil {
-			return 0, err
+	} else {
+		applied, err := applyMoves(metaDir, plan.moves, localProjects)
+		for _, m := range applied {
+			output.ProjectStatus(m.to, "success", fmt.Sprintf("moved from %s", m.from))
 		}
-		if err := os.Rename(filepath.Join(metaDir, m.from), targetDir); err != nil {
-			return 0, err
-		}
-		pruneEmptyParents(metaDir, m.from)
-		if _, isLocal := localProjects[m.to]; !isLocal {
-			if _, err := config.RemoveFromGitignore(metaDir, m.from); err != nil {
-				return 0, err
-			}
-			if _, err := config.AddToGitignore(metaDir, m.to); err != nil {
-				return 0, err
-			}
-		}
-		output.ProjectStatus(m.to, "success", fmt.Sprintf("moved from %s", m.from))
-	}
-
-	if len(moves) > 0 && !dryRun {
-		if err := ensureLocalConfigIgnored(metaDir); err != nil {
-			return 0, err
-		}
-		if err := syncLocalExcludes(metaDir, localProjects); err != nil {
+		if err != nil {
 			return 0, err
 		}
 	}
 
-	for _, p := range ambiguous {
+	for _, p := range plan.ambiguous {
 		output.Warning(fmt.Sprintf("%s: multiple working-copy directories share its repository URL — resolve manually", p))
 	}
-	for _, p := range missing {
+	for _, p := range plan.missing {
 		output.Warning(fmt.Sprintf("%s not found in working copy — run 'gogo git update' to clone", p))
 	}
 
 	if dryRun {
-		output.Info(fmt.Sprintf("Dry run: %d move(s) pending", len(moves)))
+		output.Info(fmt.Sprintf("Dry run: %d move(s) pending", len(plan.moves)))
 	}
 
-	if len(missing) > 0 || len(ambiguous) > 0 {
+	if len(plan.missing) > 0 || len(plan.ambiguous) > 0 {
 		return 1, nil
 	}
 	return 0, nil

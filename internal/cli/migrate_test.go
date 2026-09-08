@@ -231,3 +231,92 @@ func TestMigrateDryRunChangesNothingWhileReportingFailure(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(dir, "packages", "api"))
 	assert.Contains(t, buf.String(), "Dry run")
 }
+
+func TestPlanMigrationBuckets(t *testing.T) {
+	dir := t.TempDir()
+
+	// present: configured path exists with the configured origin
+	present := mkGitRepo(t, dir, "apps/web")
+	// conflict: configured path exists with a different origin
+	conflict := mkGitRepo(t, dir, "apps/api")
+	// move: the configured path is empty, the repo sits elsewhere
+	moved := mkGitRepo(t, dir, "old/shared")
+	// ambiguous: two checkouts share the URL the config wants
+	dup1 := mkGitRepo(t, dir, "one/tools")
+	dup2 := mkGitRepo(t, dir, "two/tools")
+
+	cfg := config.MetaConfig{Projects: map[string]string{
+		"apps/web":     "git@x:o/web.git",
+		"apps/api":     "git@x:o/api.git",
+		"libs/shared":  "git@x:o/shared.git",
+		"libs/tools":   "git@x:o/tools.git",
+		"libs/nowhere": "git@x:o/nowhere.git",
+	}}
+
+	ex := &fakeExecutor{remotes: map[string]string{
+		present:  "git@x:o/web.git",
+		conflict: "git@x:o/other.git",
+		moved:    "git@x:o/shared.git",
+		dup1:     "git@x:o/tools.git",
+		dup2:     "git@x:o/tools.git",
+	}}
+
+	selected := []string{"apps/api", "apps/web", "libs/nowhere", "libs/shared", "libs/tools"}
+	plan, err := planMigration(context.Background(), ex, dir, cfg, selected)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"apps/web"}, plan.present)
+	assert.Equal(t, []string{"libs/nowhere"}, plan.missing)
+	assert.Equal(t, []string{"libs/tools"}, plan.ambiguous)
+	require.Len(t, plan.moves, 1)
+	assert.Equal(t, "old/shared", plan.moves[0].from)
+	assert.Equal(t, "libs/shared", plan.moves[0].to)
+	require.Len(t, plan.conflicts, 1)
+	assert.Equal(t, "apps/api", plan.conflicts[0].path)
+	assert.Equal(t, "git@x:o/other.git", plan.conflicts[0].found)
+
+	t.Run("every selected project lands in exactly one bucket", func(t *testing.T) {
+		seen := map[string]int{}
+		for _, p := range plan.present {
+			seen[p]++
+		}
+		for _, p := range plan.missing {
+			seen[p]++
+		}
+		for _, p := range plan.ambiguous {
+			seen[p]++
+		}
+		for _, m := range plan.moves {
+			seen[m.to]++
+		}
+		for _, c := range plan.conflicts {
+			seen[c.path]++
+		}
+		for _, p := range selected {
+			assert.Equal(t, 1, seen[p], "%s must appear in exactly one bucket", p)
+		}
+	})
+}
+
+func TestApplyMovesReportsCompletedMoves(t *testing.T) {
+	dir := t.TempDir()
+	mkGitRepo(t, dir, "old/api")
+	mkGitRepo(t, dir, "old/web")
+
+	moves := []migrateMove{
+		{from: "old/api", to: "apps/api"},
+		{from: "old/web", to: "apps/web"},
+	}
+
+	applied, err := applyMoves(dir, moves, map[string]string{})
+	require.NoError(t, err)
+	assert.Equal(t, moves, applied)
+	assert.DirExists(t, filepath.Join(dir, "apps", "api"))
+	assert.DirExists(t, filepath.Join(dir, "apps", "web"))
+	assert.NoDirExists(t, filepath.Join(dir, "old"), "emptied parents are pruned")
+
+	gitignore, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	require.NoError(t, err)
+	assert.Contains(t, string(gitignore), "apps/api")
+	assert.NotContains(t, string(gitignore), "old/api")
+}
