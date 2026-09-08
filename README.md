@@ -14,6 +14,7 @@ Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a1
 ## Features
 
 - Clone entire project ecosystems with one command
+- Converge the working copy on the configuration with one command (`gogo update`)
 - Execute arbitrary commands across all repositories
 - Parallel or sequential execution modes
 - Flexible filtering (include/exclude by name or pattern)
@@ -95,6 +96,10 @@ gogo project import web git@github.com:org/web.git
 
 # Clone a meta repository (includes all children)
 gogo git clone git@github.com:org/meta-repo.git
+
+# Bring every project into the state .gogo describes:
+# move renamed ones, clone missing ones, fast-forward the rest
+gogo update
 
 # Run commands across all projects
 gogo exec "npm install"
@@ -688,6 +693,60 @@ gogo validate
 ```
 
 Checks `.gogo`, `.gogo.yaml`, and `.gogo.yml` files for valid syntax and structure.
+
+---
+
+### `gogo update`
+
+Converge the working copy on the configuration in one run: move projects that
+are checked out at another path, clone the ones that are missing, and
+fast-forward the rest.
+
+```bash
+gogo update                    # move, clone and fast-forward everything
+gogo update --dry-run          # show what would happen, change nothing
+gogo update --parallel         # clone and fast-forward concurrently
+gogo update --no-pull          # only move and clone
+gogo update --group backend    # restrict to a group
+```
+
+| Option                     | Description                                            |
+| -------------------------- | ------------------------------------------------------ |
+| `--dry-run`                | Show what would be done without changing anything      |
+| `--no-migrate`             | Do not move projects checked out at another path       |
+| `--no-clone`               | Do not clone projects that are missing                 |
+| `--no-pull`                | Do not fast-forward projects that are present          |
+| `--parallel`               | Clone and fast-forward concurrently                    |
+| `--concurrency <n>`        | Max parallel processes (default: 4)                    |
+| `--group <names>`          | Only target projects of the named group(s)             |
+| `--include-only <dirs>`    | Only update specified projects                         |
+| `--exclude-only <dirs>`    | Skip specified projects                                |
+| `--include-pattern <re>`   | Include projects matching a regex                      |
+| `--exclude-pattern <re>`   | Exclude projects matching a regex                      |
+
+**What it never does.** `gogo update` does not merge, rebase, stash, or switch
+branches. Each present project is fetched and then advanced with
+`git merge --ff-only`, so a project that has diverged from its upstream is
+reported and left untouched for you to resolve.
+
+A dirty working tree is not a reason to skip a project: the fast-forward is
+attempted, and git itself refuses it when your local changes would be
+overwritten. Work in progress that does not overlap the incoming changes
+survives.
+
+| Situation                          | Result                                        |
+| ---------------------------------- | --------------------------------------------- |
+| Behind upstream                    | `updated (N commit(s))`                       |
+| Up to date, or ahead only          | `up to date` — nothing is pushed for you      |
+| Diverged from upstream             | **failed** — resolve it manually              |
+| Detached HEAD, or no upstream      | skipped, and the run still succeeds           |
+| Occupied by a different repository | **failed** — no move is applied for any project |
+
+Exit code is `1` when any project failed, `0` otherwise. Projects that were
+skipped never cause a non-zero exit.
+
+Passing `--no-migrate --no-clone --no-pull` together is an error: there would be
+nothing left to do.
 
 ---
 
