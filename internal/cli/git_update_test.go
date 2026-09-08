@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/daFish/gogo-meta/internal/config"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,4 +89,48 @@ func TestGitUpdateRejectsPositionalArgs(t *testing.T) {
 
 	require.Error(t, err, "a positional argument must not be silently ignored")
 	assert.Contains(t, err.Error(), "unknown command")
+}
+
+// TestGitUpdateParallelFlagPositions pins that --parallel and --concurrency
+// reach the clone pool from either side of the subcommand. git update declares
+// its own copies of both flags while the root declares them persistently, so
+// the two could shadow each other.
+func TestGitUpdateParallelFlagPositions(t *testing.T) {
+	resolveVia := func(t *testing.T, args ...string) (bool, int) {
+		t.Helper()
+		root := NewRootCommand("test")
+		updateCmd, _, err := root.Find([]string{"git", "update"})
+		require.NoError(t, err)
+
+		var parallel bool
+		var concurrency int
+		updateCmd.RunE = func(cmd *cobra.Command, _ []string) error {
+			parallel = getBoolFlag(cmd, "parallel")
+			concurrency = getIntFlag(cmd, "concurrency")
+			return nil
+		}
+		root.SetArgs(args)
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		require.NoError(t, root.Execute())
+		return parallel, concurrency
+	}
+
+	t.Run("before the subcommand", func(t *testing.T) {
+		parallel, concurrency := resolveVia(t, "--parallel", "--concurrency", "8", "git", "update")
+		assert.True(t, parallel, "--parallel before the subcommand must reach the clone pool")
+		assert.Equal(t, 8, concurrency)
+	})
+
+	t.Run("after the subcommand", func(t *testing.T) {
+		parallel, concurrency := resolveVia(t, "git", "update", "--parallel", "--concurrency", "3")
+		assert.True(t, parallel, "--parallel after the subcommand must reach the clone pool")
+		assert.Equal(t, 3, concurrency)
+	})
+
+	t.Run("absent", func(t *testing.T) {
+		parallel, concurrency := resolveVia(t, "git", "update")
+		assert.False(t, parallel)
+		assert.Zero(t, concurrency, "cloneMissing falls back to loop.DefaultConcurrency")
+	})
 }

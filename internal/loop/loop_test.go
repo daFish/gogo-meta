@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
@@ -290,4 +291,114 @@ func TestSequentialKeepsResultsWhenOneErrors(t *testing.T) {
 	assert.False(t, byDir["b"].Success, "the erroring project is marked failed, not discarded")
 	assert.Equal(t, 1, byDir["b"].Result.ExitCode)
 	assert.Equal(t, "boom", byDir["b"].Result.Stderr)
+}
+
+func TestRunEachPreservesInputOrder(t *testing.T) {
+	tests := []struct {
+		name        string
+		parallel    bool
+		concurrency int
+	}{
+		{name: "sequential", parallel: false},
+		{name: "parallel default concurrency", parallel: true, concurrency: 0},
+		{name: "parallel concurrency 1", parallel: true, concurrency: 1},
+		{name: "parallel concurrency above item count", parallel: true, concurrency: 99},
+	}
+
+	items := []string{"c", "a", "b", "d"}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := RunEach(context.Background(), items, tt.parallel, tt.concurrency,
+				func(_ context.Context, item string) (*executor.Result, error) {
+					return &executor.Result{ExitCode: 0, Stdout: "out:" + item}, nil
+				})
+
+			require.Len(t, results, len(items))
+			for i, item := range items {
+				assert.Equal(t, item, results[i].Directory)
+				assert.Equal(t, "out:"+item, results[i].Result.Stdout)
+				assert.True(t, results[i].Success)
+			}
+		})
+	}
+}
+
+func TestRunEachHonorsConcurrencyLimit(t *testing.T) {
+	items := []string{"a", "b", "c", "d", "e", "f"}
+
+	var mu sync.Mutex
+	inFlight, maxInFlight := 0, 0
+
+	results := RunEach(context.Background(), items, true, 2,
+		func(_ context.Context, _ string) (*executor.Result, error) {
+			mu.Lock()
+			inFlight++
+			if inFlight > maxInFlight {
+				maxInFlight = inFlight
+			}
+			mu.Unlock()
+
+			time.Sleep(20 * time.Millisecond)
+
+			mu.Lock()
+			inFlight--
+			mu.Unlock()
+			return &executor.Result{ExitCode: 0}, nil
+		})
+
+	require.Len(t, results, len(items))
+	assert.LessOrEqual(t, maxInFlight, 2, "no more than concurrency items may run at once")
+	assert.Greater(t, maxInFlight, 1, "parallel must actually overlap work")
+}
+
+func TestRunEachSequentialDoesNotOverlap(t *testing.T) {
+	var mu sync.Mutex
+	inFlight, maxInFlight := 0, 0
+
+	RunEach(context.Background(), []string{"a", "b", "c"}, false, 4,
+		func(_ context.Context, _ string) (*executor.Result, error) {
+			mu.Lock()
+			inFlight++
+			if inFlight > maxInFlight {
+				maxInFlight = inFlight
+			}
+			mu.Unlock()
+
+			time.Sleep(5 * time.Millisecond)
+
+			mu.Lock()
+			inFlight--
+			mu.Unlock()
+			return &executor.Result{ExitCode: 0}, nil
+		})
+
+	assert.Equal(t, 1, maxInFlight, "sequential must run one item at a time")
+}
+
+func TestRunEachRecordsErrorAsFailedResult(t *testing.T) {
+	items := []string{"a", "b"}
+
+	results := RunEach(context.Background(), items, false, 0,
+		func(_ context.Context, item string) (*executor.Result, error) {
+			if item == "a" {
+				return nil, errors.New("boom")
+			}
+			return &executor.Result{ExitCode: 0}, nil
+		})
+
+	require.Len(t, results, 2)
+	assert.False(t, results[0].Success)
+	assert.Equal(t, 1, results[0].Result.ExitCode)
+	assert.Equal(t, "boom", results[0].Result.Stderr)
+	assert.Equal(t, "a", results[0].Directory)
+}
+
+func TestRunEachEmptyItems(t *testing.T) {
+	results := RunEach(context.Background(), nil, true, 4,
+		func(_ context.Context, _ string) (*executor.Result, error) {
+			t.Fatal("fn must not be called for an empty item list")
+			return nil, nil
+		})
+	assert.Empty(t, results)
 }

@@ -7,7 +7,6 @@ import (
 
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/filter"
-	"github.com/daFish/gogo-meta/internal/giturl"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -88,46 +87,24 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 
 	output.Info(fmt.Sprintf("Cloning %d missing repositories...", len(missingRepos)))
 
-	exec := executor.NewShellExecutor()
-	ctx := cmd.Context()
+	targets := make([]cloneTarget, len(missingRepos))
+	for i, m := range missingRepos {
+		targets[i] = cloneTarget{Path: m.path, URL: m.url}
+	}
+
+	outcomes := cloneMissing(cmd.Context(), executor.NewShellExecutor(), metaDir, targets,
+		getBoolFlag(cmd, "parallel"), getIntFlag(cmd, "concurrency"))
 
 	successCount := 0
 	failCount := 0
-
-	for _, m := range missingRepos {
-		if err := giturl.Validate(m.url); err != nil {
-			output.ProjectStatus(m.path, "error", err.Error())
-			failCount++
-			continue
-		}
-
-		projectDir := filepath.Join(metaDir, m.path)
-		parentDir := filepath.Dir(projectDir)
-
-		if err := os.MkdirAll(parentDir, 0o755); err != nil {
-			output.ProjectStatus(m.path, "error", err.Error())
-			failCount++
-			continue
-		}
-
-		result, err := exec.ExecuteArgs(ctx, "git", []string{"clone", "--", m.url, filepath.Base(m.path)}, executor.Options{Cwd: parentDir})
-		if err != nil {
-			output.ProjectStatus(m.path, "error", err.Error())
-			failCount++
-			continue
-		}
-
-		if result.ExitCode == 0 {
-			output.ProjectStatus(m.path, "success", "cloned")
+	for _, o := range outcomes {
+		if o.Err == "" {
+			output.ProjectStatus(o.Path, "success", "cloned")
 			successCount++
-		} else {
-			msg := result.Stderr
-			if msg == "" {
-				msg = "clone failed"
-			}
-			output.ProjectStatus(m.path, "error", msg)
-			failCount++
+			continue
 		}
+		output.ProjectStatus(o.Path, "error", o.Err)
+		failCount++
 	}
 
 	output.Summary(output.SummaryData{

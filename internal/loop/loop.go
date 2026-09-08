@@ -128,26 +128,61 @@ func runSequential(ctx context.Context, command CommandFn, directories []string,
 	return results, nil
 }
 
-func runParallel(ctx context.Context, command CommandFn, directories []string, loopCtx Context, opts Options) ([]Result, error) {
+// RunEach runs fn once per item and returns one Result per item, in input order.
+// With parallel it uses a pool of at most concurrency workers (DefaultConcurrency
+// when concurrency is not positive); otherwise items run in order on the calling
+// goroutine. It prints nothing. A non-nil error from fn cancels the context the
+// remaining items see.
+func RunEach(ctx context.Context, items []string, parallel bool, concurrency int, fn func(ctx context.Context, item string) (*executor.Result, error)) []Result {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	concurrency := opts.Concurrency
-	if concurrency <= 0 {
-		concurrency = DefaultConcurrency
+	results := make([]Result, len(items))
+
+	run := func(idx int) {
+		start := time.Now()
+		result, err := fn(ctx, items[idx])
+		duration := time.Since(start)
+
+		if err != nil {
+			cancel()
+			results[idx] = Result{
+				Directory: items[idx],
+				Result:    executor.Result{ExitCode: 1, Stderr: err.Error()},
+				Success:   false,
+				Duration:  duration,
+			}
+			return
+		}
+
+		results[idx] = Result{
+			Directory: items[idx],
+			Result:    *result,
+			Success:   result.ExitCode == 0,
+			Duration:  duration,
+		}
 	}
 
-	results := make([]Result, len(directories))
-	work := make(chan int, len(directories))
-	for i := range directories {
-		work <- i
+	if !parallel {
+		for idx := range items {
+			run(idx)
+		}
+		return results
 	}
-	close(work)
 
 	workers := concurrency
-	if workers > len(directories) {
-		workers = len(directories)
+	if workers <= 0 {
+		workers = DefaultConcurrency
 	}
+	if workers > len(items) {
+		workers = len(items)
+	}
+
+	work := make(chan int, len(items))
+	for idx := range items {
+		work <- idx
+	}
+	close(work)
 
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
@@ -155,35 +190,19 @@ func runParallel(ctx context.Context, command CommandFn, directories []string, l
 		go func() {
 			defer wg.Done()
 			for idx := range work {
-				projectPath := directories[idx]
-				absoluteDir := filepath.Join(loopCtx.MetaDir, projectPath)
-
-				start := time.Now()
-				result, err := command(ctx, absoluteDir, projectPath)
-				duration := time.Since(start)
-
-				if err != nil {
-					cancel()
-					results[idx] = Result{
-						Directory: projectPath,
-						Result:    executor.Result{ExitCode: 1, Stderr: err.Error()},
-						Success:   false,
-						Duration:  duration,
-					}
-					continue
-				}
-
-				results[idx] = Result{
-					Directory: projectPath,
-					Result:    *result,
-					Success:   result.ExitCode == 0,
-					Duration:  duration,
-				}
+				run(idx)
 			}
 		}()
 	}
-
 	wg.Wait()
+
+	return results
+}
+
+func runParallel(ctx context.Context, command CommandFn, directories []string, loopCtx Context, opts Options) ([]Result, error) {
+	results := RunEach(ctx, directories, true, opts.Concurrency, func(ctx context.Context, projectPath string) (*executor.Result, error) {
+		return command(ctx, filepath.Join(loopCtx.MetaDir, projectPath), projectPath)
+	})
 
 	for _, r := range results {
 		output.Header(r.Directory)
