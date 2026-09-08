@@ -109,7 +109,7 @@ func runProjectImport(cmd *cobra.Command, args []string) error {
 			if added {
 				output.Info(fmt.Sprintf("Added %s to .gitignore", folder))
 			}
-			output.Info("Run \"gogo git update\" to clone missing projects")
+			output.Info(cloneLaterHint)
 			return nil
 		}
 

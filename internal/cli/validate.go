@@ -93,8 +93,6 @@ func findConfigFiles(cwd string) ([]string, error) {
 	return configFiles, nil
 }
 
-const missingDirectoryHint = "directory missing — run 'gogo migrate' if it moved, or 'gogo git update' to clone"
-
 // validateWorkingCopy checks the merged config — cross-references between
 // projects, groups and commands — plus the presence of every configured
 // project directory in the working copy. It prints the problems it finds and

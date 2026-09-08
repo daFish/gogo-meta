@@ -19,7 +19,7 @@ const DefaultConcurrency = 4
 // is absent. Without it the command is still run and the executor fails to
 // change into the working directory, which surfaces as an exit code with no
 // output at all.
-const MissingDirectoryMessage = "directory missing — run 'gogo git update' to clone it"
+const MissingDirectoryMessage = "directory missing — run 'gogo update' to clone it"
 
 // Context holds the configuration and directory for loop operations.
 type Context struct {
