@@ -2,6 +2,7 @@ package loop
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -13,6 +14,12 @@ import (
 )
 
 const DefaultConcurrency = 4
+
+// MissingDirectoryMessage is reported for a configured project whose directory
+// is absent. Without it the command is still run and the executor fails to
+// change into the working directory, which surfaces as an exit code with no
+// output at all.
+const MissingDirectoryMessage = "directory missing — run 'gogo git update' to clone it"
 
 // Context holds the configuration and directory for loop operations.
 type Context struct {
@@ -54,6 +61,17 @@ func ArgsCommand(exec executor.Executor, name string, args ...string) CommandFn 
 	}
 }
 
+// skipMissingDirectories reports a configured project whose directory is absent
+// instead of running command in it.
+func skipMissingDirectories(command CommandFn) CommandFn {
+	return func(ctx context.Context, absoluteDir, projectPath string) (*executor.Result, error) {
+		if _, err := os.Stat(absoluteDir); os.IsNotExist(err) {
+			return &executor.Result{ExitCode: 1, Stderr: MissingDirectoryMessage}, nil
+		}
+		return command(ctx, absoluteDir, projectPath)
+	}
+}
+
 // Loop executes command across all matching project directories.
 func Loop(ctx context.Context, command CommandFn, loopCtx Context, opts Options) ([]Result, error) {
 	directories := config.GetProjectPaths(loopCtx.Config)
@@ -63,6 +81,8 @@ func Loop(ctx context.Context, command CommandFn, loopCtx Context, opts Options)
 		output.Warning("No projects match the specified filters")
 		return nil, nil
 	}
+
+	command = skipMissingDirectories(command)
 
 	var err error
 	var results []Result
