@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -42,6 +44,16 @@ func newMockExecutor(results map[string]*executor.Result) *mockExecutor {
 	return &mockExecutor{results: results}
 }
 
+// mkProjects creates the working-copy directory of every named project. Loop
+// skips a project whose directory is absent, so a test that expects its command
+// to run has to create them.
+func mkProjects(t *testing.T, metaDir string, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		require.NoError(t, os.MkdirAll(filepath.Join(metaDir, name), 0o755))
+	}
+}
+
 func suppressOutput() func() {
 	var buf bytes.Buffer
 	origWriter := output.Writer
@@ -63,6 +75,7 @@ func TestLoopSequential(t *testing.T) {
 		Projects: map[string]string{"api": "url1", "web": "url2"},
 		Ignore:   []string{},
 	}
+	mkProjects(t, dir, "api", "web")
 
 	mock := newMockExecutor(map[string]*executor.Result{})
 
@@ -83,6 +96,7 @@ func TestLoopParallel(t *testing.T) {
 		Projects: map[string]string{"a": "url1", "b": "url2", "c": "url3"},
 		Ignore:   []string{},
 	}
+	mkProjects(t, dir, "a", "b", "c")
 
 	mock := newMockExecutor(map[string]*executor.Result{})
 
@@ -105,6 +119,8 @@ func TestLoopWithFailures(t *testing.T) {
 		Ignore:   []string{},
 	}
 
+	mkProjects(t, dir, "api", "web")
+
 	mock := newMockExecutor(map[string]*executor.Result{})
 	// Default returns success for all, override for web specifically.
 	// We need the full path since the executor receives absolute paths.
@@ -125,6 +141,7 @@ func TestLoopWithFilter(t *testing.T) {
 		Projects: map[string]string{"api": "url1", "web": "url2", "docs": "url3"},
 		Ignore:   []string{},
 	}
+	mkProjects(t, dir, "api", "web", "docs")
 
 	mock := newMockExecutor(map[string]*executor.Result{})
 
@@ -163,6 +180,7 @@ func TestLoopCommandFn(t *testing.T) {
 		Projects: map[string]string{"api": "url1"},
 		Ignore:   []string{},
 	}
+	mkProjects(t, dir, "api")
 
 	fn := CommandFn(func(_ context.Context, absoluteDir, projectPath string) (*executor.Result, error) {
 		return &executor.Result{ExitCode: 0, Stdout: "custom:" + projectPath}, nil
@@ -223,9 +241,11 @@ func TestParallelKeepsResultsWhenOneErrors(t *testing.T) {
 	output.Writer, output.ErrWriter = &buf, &buf
 	defer func() { output.Writer, output.ErrWriter = origW, origE }()
 
+	dir := t.TempDir()
 	cfg := config.MetaConfig{Projects: map[string]string{
 		"a": "urlA", "b": "urlB", "c": "urlC",
 	}}
+	mkProjects(t, dir, "a", "b", "c")
 
 	command := CommandFn(func(_ context.Context, _, projectPath string) (*executor.Result, error) {
 		if projectPath == "b" {
@@ -235,7 +255,7 @@ func TestParallelKeepsResultsWhenOneErrors(t *testing.T) {
 	})
 
 	results, err := Loop(context.Background(), command,
-		Context{Config: cfg, MetaDir: t.TempDir()},
+		Context{Config: cfg, MetaDir: dir},
 		Options{Parallel: true})
 	require.NoError(t, err)
 	require.Len(t, results, 3)
@@ -261,9 +281,11 @@ func TestSequentialKeepsResultsWhenOneErrors(t *testing.T) {
 	output.Writer, output.ErrWriter = &buf, &buf
 	defer func() { output.Writer, output.ErrWriter = origW, origE }()
 
+	dir := t.TempDir()
 	cfg := config.MetaConfig{Projects: map[string]string{
 		"a": "urlA", "b": "urlB", "c": "urlC",
 	}}
+	mkProjects(t, dir, "a", "b", "c")
 
 	command := CommandFn(func(_ context.Context, _, projectPath string) (*executor.Result, error) {
 		if projectPath == "b" {
@@ -273,7 +295,7 @@ func TestSequentialKeepsResultsWhenOneErrors(t *testing.T) {
 	})
 
 	results, err := Loop(context.Background(), command,
-		Context{Config: cfg, MetaDir: t.TempDir()},
+		Context{Config: cfg, MetaDir: dir},
 		Options{})
 	require.NoError(t, err)
 	require.Len(t, results, 3)
@@ -291,6 +313,52 @@ func TestSequentialKeepsResultsWhenOneErrors(t *testing.T) {
 	assert.False(t, byDir["b"].Success, "the erroring project is marked failed, not discarded")
 	assert.Equal(t, 1, byDir["b"].Result.ExitCode)
 	assert.Equal(t, "boom", byDir["b"].Result.Stderr)
+}
+
+func TestLoopReportsMissingDirectory(t *testing.T) {
+	tests := []struct {
+		name     string
+		parallel bool
+	}{
+		{name: "sequential", parallel: false},
+		{name: "parallel", parallel: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			restore := suppressOutput()
+			defer restore()
+
+			dir := t.TempDir()
+			cfg := config.MetaConfig{Projects: map[string]string{"api": "url1", "web": "url2"}}
+			mkProjects(t, dir, "api")
+
+			var ran []string
+			var mu sync.Mutex
+			command := CommandFn(func(_ context.Context, _, projectPath string) (*executor.Result, error) {
+				mu.Lock()
+				ran = append(ran, projectPath)
+				mu.Unlock()
+				return &executor.Result{ExitCode: 0}, nil
+			})
+
+			results, err := Loop(context.Background(), command,
+				Context{Config: cfg, MetaDir: dir}, Options{Parallel: tt.parallel})
+			require.NoError(t, err)
+			require.Len(t, results, 2)
+
+			byDir := map[string]Result{}
+			for _, r := range results {
+				byDir[r.Directory] = r
+			}
+			assert.True(t, byDir["api"].Success)
+			assert.False(t, byDir["web"].Success, "a project without a directory must fail")
+			assert.Equal(t, 1, byDir["web"].Result.ExitCode)
+			assert.Equal(t, MissingDirectoryMessage, byDir["web"].Result.Stderr,
+				"the failure must say why, instead of being empty")
+			assert.Equal(t, []string{"api"}, ran, "the command must not run for a missing directory")
+		})
+	}
 }
 
 func TestRunEachPreservesInputOrder(t *testing.T) {
