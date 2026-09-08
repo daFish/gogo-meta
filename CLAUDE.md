@@ -31,6 +31,9 @@ internal/
 │   ├── run.go             # gogo run
 │   ├── validate.go        # gogo validate
 │   ├── migrate.go         # gogo migrate
+│   ├── update.go          # gogo update (move + clone + fast-forward)
+│   ├── clone.go           # shared clone phase (gogo update, gogo git update)
+│   ├── hints.go           # shared user-facing hints
 │   ├── git.go             # gogo git (parent command)
 │   ├── git_clone.go       # gogo git clone
 │   ├── git_update.go      # gogo git update
@@ -58,8 +61,11 @@ internal/
 ├── filter/
 │   ├── filter.go          # Include/exclude filtering
 │   └── filter_test.go
+├── gitstate/
+│   ├── gitstate.go        # porcelain=v2 inspection, fetch, ahead/behind, --ff-only
+│   └── gitstate_test.go
 ├── loop/
-│   ├── loop.go            # Sequential + parallel orchestration
+│   ├── loop.go            # Sequential + parallel orchestration, RunEach worker pool
 │   └── loop_test.go
 ├── output/
 │   ├── output.go          # Terminal formatting, symbols, summary
@@ -91,6 +97,7 @@ gogo exec "<command>" [--parallel] # Run command across repos
 gogo exec --group foo "<command>"  # Restrict to the projects of group foo
 gogo run [name]                    # Run predefined command from .gogo
 gogo validate                      # Validate config file(s)
+gogo update [--dry-run]            # Converge working copy: move + clone + fast-forward
 gogo migrate [--dry-run]           # Move/rename working-copy dirs to match config
 gogo git clone <url>               # Clone meta + children
 gogo git update                    # Clone missing repos
@@ -182,3 +189,23 @@ file found in the cwd and next to the primary one, so an overlay that was not
 loaded still counts.
 Reading stays permissive because an overlay may group projects declared in the
 base config and vice versa.
+
+### Converging the working copy
+
+`gogo update` is the one command that makes the working copy match the config:
+it moves projects checked out at another path, clones the missing ones, and
+fast-forwards the rest. `gogo migrate` and `gogo git update` remain as the
+single-purpose primitives it is composed from.
+
+The three phases share `planMigration` (`internal/cli/migrate.go`), which buckets
+every selected project into `present`, `moves`, `missing`, `ambiguous` or
+`conflicts`. A project belongs to exactly one bucket and is reported exactly
+once: `runUpdate` carries a mutable pull set through the phases rather than
+re-planning from disk after the moves, since a re-plan would reclassify projects
+an earlier phase already reported.
+
+The pull phase never merges, rebases, stashes or switches branches. It reads
+`git status --porcelain=v2 --branch` through `internal/gitstate` — machine
+output, because git localizes its prose and the executor cannot pin `LC_ALL` —
+then fetches and advances with `git merge --ff-only @{u}`. A dirty working tree
+is not a gate; git's own refusal is what guards it.
