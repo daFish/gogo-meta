@@ -222,7 +222,6 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 
 	if dryRun {
 		output.Info(fmt.Sprintf("Dry run: %d move(s) pending", len(moves)))
-		return 0, nil
 	}
 
 	if len(missing) > 0 || len(ambiguous) > 0 {
