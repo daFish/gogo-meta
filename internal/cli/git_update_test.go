@@ -68,3 +68,23 @@ func readExcludeFile(t *testing.T, dir string) string {
 	require.NoError(t, err)
 	return string(b)
 }
+
+func TestGitUpdateRejectsPositionalArgs(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git", "info"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"projects":{"api":"git@x:o/api.git","web":"git@x:o/web.git"}}`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "api"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "web"), 0o755))
+
+	config.SetOverlayFiles(nil)
+	_ = captureOutput(t)
+	initTestChdir(t, dir)
+
+	cmd := newGitUpdateCmd()
+	cmd.SetArgs([]string{"web"})
+	err := cmd.Execute()
+
+	require.Error(t, err, "a positional argument must not be silently ignored")
+	assert.Contains(t, err.Error(), "unknown command")
+}
