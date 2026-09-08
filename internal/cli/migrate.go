@@ -254,7 +254,7 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 		output.Warning(fmt.Sprintf("%s: multiple working-copy directories share its repository URL — resolve manually", p))
 	}
 	for _, p := range plan.missing {
-		output.Warning(fmt.Sprintf("%s not found in working copy — run 'gogo git update' to clone", p))
+		output.Warning(fmt.Sprintf(notFoundHint, p))
 	}
 
 	if dryRun {

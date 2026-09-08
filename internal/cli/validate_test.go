@@ -58,7 +58,7 @@ func TestValidateWorkingCopyMissingDir(t *testing.T) {
 	err := runValidate(nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, buf.String(), "directory missing")
-	assert.Contains(t, buf.String(), "gogo migrate")
+	assert.Contains(t, buf.String(), "gogo update")
 }
 
 func TestValidateWorkingCopyAllPresent(t *testing.T) {

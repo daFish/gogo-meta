@@ -178,7 +178,7 @@ func TestMigrateMissingExitsNonZero(t *testing.T) {
 	code, err := runMigrate(context.Background(), &fakeExecutor{}, dir, false)
 	require.NoError(t, err)
 	assert.Equal(t, 1, code)
-	assert.Contains(t, buf.String(), "gogo git update")
+	assert.Contains(t, buf.String(), "gogo update")
 }
 
 func TestMigrateDryRunMatchesRealRunExitCode(t *testing.T) {
