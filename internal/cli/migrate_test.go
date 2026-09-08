@@ -180,3 +180,54 @@ func TestMigrateMissingExitsNonZero(t *testing.T) {
 	assert.Equal(t, 1, code)
 	assert.Contains(t, buf.String(), "gogo git update")
 }
+
+func TestMigrateDryRunMatchesRealRunExitCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		gogo     string
+		repos    map[string]string
+		wantCode int
+	}{
+		{
+			name:     "missing project",
+			gogo:     `{"projects":{"api":"git@x:org/api.git"}}`,
+			wantCode: 1,
+		},
+		{
+			name:     "everything already in place",
+			gogo:     `{"projects":{}}`,
+			wantCode: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, dryRun := range []bool{false, true} {
+				dir := t.TempDir()
+				writeGogo(t, dir, tt.gogo)
+				_ = captureOutput(t)
+
+				code, err := runMigrate(context.Background(), &fakeExecutor{remotes: tt.repos}, dir, dryRun)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantCode, code,
+					"dry run and real run must report the same exit code (dryRun=%v)", dryRun)
+			}
+		})
+	}
+}
+
+func TestMigrateDryRunChangesNothingWhileReportingFailure(t *testing.T) {
+	dir := t.TempDir()
+	writeGogo(t, dir, `{"projects":{"packages/api":"git@x:org/api.git","web":"git@x:org/web.git"}}`)
+	from := mkGitRepo(t, dir, "lib/api")
+	buf := captureOutput(t)
+
+	code, err := runMigrate(context.Background(),
+		&fakeExecutor{remotes: map[string]string{from: "git@x:org/api.git"}}, dir, true)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, code, "a pending move plus a missing project is a failure the dry run must report")
+	assert.DirExists(t, filepath.Join(dir, "lib", "api"), "dry run must not move anything")
+	assert.NoDirExists(t, filepath.Join(dir, "packages", "api"))
+	assert.Contains(t, buf.String(), "Dry run")
+}
