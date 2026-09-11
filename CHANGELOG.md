@@ -71,6 +71,36 @@ from the `projects` map in `.gogo`. `gogo validate` also no longer validates
 
 * add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
 
+## [3.2.0](https://github.com/daFish/gogo-meta/compare/v3.1.1...v3.2.0) (2026-09-11)
+
+
+### Features
+
+* **cli:** add gogo update to converge the working copy in one run ([f713cc9](https://github.com/daFish/gogo-meta/commit/f713cc968dddc68ec04f1f93dadb8ffe3e6cf8d1))
+* **gitstate:** add read-only git inspection and fast-forward plumbing ([94a5e16](https://github.com/daFish/gogo-meta/commit/94a5e16ff6a733d6d15df7dd6da9a6d65539e985))
+
+
+### Bug Fixes
+
+* **ci:** emit postflight_steps instead of the deprecated postflight stanza ([93f1224](https://github.com/daFish/gogo-meta/commit/93f12246d0f8d3f0d110cd5fcb725c7a3dd5749a))
+* **cli:** honor --parallel and --concurrency in gogo git update ([6a7e849](https://github.com/daFish/gogo-meta/commit/6a7e84991758f26d7a2e951b9d532a32b7d51747))
+* **cli:** point every missing-directory hint at gogo update ([628447f](https://github.com/daFish/gogo-meta/commit/628447fd726cf6ec7cb9c4558fde5fec336bd269))
+* **cli:** reject positional arguments on gogo git update ([f82866a](https://github.com/daFish/gogo-meta/commit/f82866a9cb25628e8afd6001f4b8d39fc69ef7be))
+* **cli:** return the real run's exit code from gogo migrate --dry-run ([0211631](https://github.com/daFish/gogo-meta/commit/0211631ba55dae00fd0b81636d1678a71b848a9d))
+* **loop:** report configured projects whose directory is missing ([9bdd399](https://github.com/daFish/gogo-meta/commit/9bdd39946d1a47b1bc89c8893d589d1588233575))
+
+
+### Code Refactoring
+
+* **cli:** split gogo migrate into a plan and an apply step ([e38b28b](https://github.com/daFish/gogo-meta/commit/e38b28b15cf66174f630f247ceb8f0d78df4e87c))
+
+
+### Documentation
+
+* add the implementation design for gogo update ([9a88364](https://github.com/daFish/gogo-meta/commit/9a88364595bc2e9bcdf3f27220f2395d75fba395))
+* document gogo update ([dc4eb7c](https://github.com/daFish/gogo-meta/commit/dc4eb7cec63b42c336927a3375c4f801b49466bb))
+* record the Phase 1 outcome and settle the unborn-branch question ([c987f1d](https://github.com/daFish/gogo-meta/commit/c987f1dba52ebcc1e20fc83106ca536dcf96c5b8))
+
 ## [3.1.1](https://github.com/daFish/gogo-meta/compare/v3.1.0...v3.1.1) (2026-09-07)
 
 
