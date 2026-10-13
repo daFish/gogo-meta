@@ -17,7 +17,7 @@ here; they are recorded so the plan carries decisions rather than proposals.
 | Decision 1 | "Recursively" means **(a) every configured project**, not descent into child meta repos | Option (b) stays fully designed below but moves to Phase 2.1; nothing in Phase 0/1 depends on it |
 | Open question 11 | `gogo migrate` **keeps exit 1** for missing/ambiguous projects | Phase 0.3 only aligns `--dry-run` with the real run; the real run's contract is unchanged, so `TestMigrateMissingExitsNonZero` stays as-is |
 
-The remaining eleven open questions in §10 are still open.
+Open question 1 was settled later by Phase 2.3 (#81). The other nine open questions in §10 are still open.
 
 ---
 
@@ -573,7 +573,7 @@ Two deviations from the design as written:
 | --- | --- | --- |
 | 2.1 | `--recursive` / `--max-depth` (Decision 1b) for `gogo update` and `gogo git clone` | 1.3 |
 | 2.2 | `--strict`: skipped outcomes exit 1 (CI use) | 1.3 |
-| 2.3 | Remote-URL normalization for conflict and move matching (ssh vs https, trailing `.git`) | 1.2 |
+| 2.3 | ~~Remote-URL normalization for conflict and move matching (ssh vs https, trailing `.git`)~~ — done (#81), see open question 1 | 1.2 |
 | 2.4 | Re-plan after moves so a conflict that a move would resolve no longer aborts the move phase | 1.2 |
 | 2.5 | `gogo git pull --ff-only` or adoption of the Decision 5 policy by `gogo git pull` | 1.1 |
 | 2.6 | `Args: cobra.NoArgs` on `git status`, `git pull`, `git push`, `git commit`, `npm install`, `npm link` | — |
@@ -768,11 +768,18 @@ New messages introduced by `gogo update` are the ones listed in §3.4. `gogo git
 
 ## 10. Open questions
 
-1. **Remote-URL matching is exact string comparison** (`migrate.go:151`, `:160`). A repo cloned via
-   `https://github.com/org/api.git` under a config that says `git@github.com:org/api.git` is a
-   *conflict* today and will remain one in `gogo update`, which aborts the move phase. Should
-   `planMigration` normalize (scheme, host, trailing `.git`, case)? Proposed as Phase 2.3; not
-   assumed here.
+1. ~~**Remote-URL matching is exact string comparison**~~ — **RESOLVED by Phase 2.3 (#81).**
+   `planMigration` compares remotes through `giturl.Canonical`, which is used for equality only;
+   `git clone` still receives the configured URL verbatim. Settled as part of it:
+   - ssh, scp-style and https spellings of one repository are **equal**, with no warning. Without
+     that a repository cloned over ssh under an https config is a conflict that aborts every move.
+   - Hosts are case-folded everywhere; paths only on github.com, gitlab.com and bitbucket.org, which
+     are known to be case-insensitive. Ports and user info are ignored. Local paths keep their case.
+   - Matching only relaxes. Rewriting a mismatched origin to the configured URL is not done; it
+     changes the user's repository and would be a separate, opt-in behavior.
+   - A checkout is moved to at most one project, and never away from a configured project it
+     already serves: a config that lists one repository at two paths gets a second clone. Wider
+     matching makes that case reachable.
 2. **An existing empty directory at a configured path** is a conflict (`found no remote`). `git clone`
    into an empty directory succeeds. Should an empty directory count as missing?
 3. **`--strict`** (skipped → exit 1) for CI workspaces that must be fully converged. Phase 2.2.
