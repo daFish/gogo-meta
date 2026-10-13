@@ -93,7 +93,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 	}
 
 	outcomes := cloneMissing(cmd.Context(), executor.NewShellExecutor(), metaDir, targets,
-		getBoolFlag(cmd, "parallel"), getIntFlag(cmd, "concurrency"))
+		getBoolFlag(cmd, "parallel"), getIntFlag(cmd, "concurrency"), nil)
 
 	successCount := 0
 	failCount := 0

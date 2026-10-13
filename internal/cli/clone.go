@@ -8,6 +8,7 @@ import (
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/giturl"
 	"github.com/daFish/gogo-meta/internal/loop"
+	"github.com/daFish/gogo-meta/internal/output"
 )
 
 // cloneTarget is a configured project that is absent from the working copy.
@@ -25,8 +26,9 @@ type cloneOutcome struct {
 
 // cloneMissing clones every target into metaDir and returns one outcome per
 // target, in input order. Cloning runs through loop.RunEach, so it honors
-// parallel and concurrency the same way the loop commands do.
-func cloneMissing(ctx context.Context, ex executor.Executor, metaDir string, targets []cloneTarget, parallel bool, concurrency int) []cloneOutcome {
+// parallel and concurrency the same way the loop commands do. A non-nil progress
+// is advanced once per finished target.
+func cloneMissing(ctx context.Context, ex executor.Executor, metaDir string, targets []cloneTarget, parallel bool, concurrency int, progress *output.Progress) []cloneOutcome {
 	paths := make([]string, len(targets))
 	byPath := make(map[string]cloneTarget, len(targets))
 	for i, t := range targets {
@@ -42,6 +44,7 @@ func cloneMissing(ctx context.Context, ex executor.Executor, metaDir string, tar
 	}
 
 	results := loop.RunEach(ctx, paths, parallel, concurrency, func(ctx context.Context, projectPath string) (*executor.Result, error) {
+		defer progress.Advance()
 		target := byPath[projectPath]
 
 		if err := giturl.Validate(target.URL); err != nil {
