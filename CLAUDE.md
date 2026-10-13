@@ -201,7 +201,9 @@ single-purpose primitives it is composed from.
 
 The three phases share `planMigration` (`internal/cli/migrate.go`), which buckets
 every selected project into `present`, `moves`, `missing`, `ambiguous` or
-`conflicts`. A project belongs to exactly one bucket and is reported exactly
+`conflicts`. Remotes are matched through `giturl.Canonical` (ssh/https, `.git`
+suffix, trailing slash, host case), never as raw strings; the configured URL
+is still what `git clone` receives. A project belongs to exactly one bucket and is reported exactly
 once: `runUpdate` carries a mutable pull set through the phases rather than
 re-planning from disk after the moves, since a re-plan would reclassify projects
 an earlier phase already reported.
