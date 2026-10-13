@@ -68,7 +68,7 @@ func TestCloneMissingReportsOutcomesInInputOrder(t *testing.T) {
 
 	for _, parallel := range []bool{false, true} {
 		ex := &cloneExecutor{}
-		outcomes := cloneMissing(context.Background(), ex, t.TempDir(), targets, parallel, 4)
+		outcomes := cloneMissing(context.Background(), ex, t.TempDir(), targets, parallel, 4, nil)
 
 		require.Len(t, outcomes, len(targets))
 		for i, target := range targets {
@@ -121,7 +121,7 @@ func TestCloneMissingIsolatesPerTargetFailures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ex := &cloneExecutor{results: tt.results}
-			outcomes := cloneMissing(context.Background(), ex, t.TempDir(), tt.targets, false, 0)
+			outcomes := cloneMissing(context.Background(), ex, t.TempDir(), tt.targets, false, 0, nil)
 
 			require.Len(t, outcomes, len(tt.targets))
 			for _, o := range outcomes {
@@ -154,13 +154,13 @@ func TestCloneMissingHonorsParallelAndConcurrency(t *testing.T) {
 
 	t.Run("sequential clones one at a time", func(t *testing.T) {
 		ex := &cloneExecutor{delay: 5 * time.Millisecond}
-		cloneMissing(context.Background(), ex, t.TempDir(), targets, false, 4)
+		cloneMissing(context.Background(), ex, t.TempDir(), targets, false, 4, nil)
 		assert.Equal(t, 1, ex.maxInFlight)
 	})
 
 	t.Run("parallel overlaps up to concurrency", func(t *testing.T) {
 		ex := &cloneExecutor{delay: 20 * time.Millisecond}
-		cloneMissing(context.Background(), ex, t.TempDir(), targets, true, 2)
+		cloneMissing(context.Background(), ex, t.TempDir(), targets, true, 2, nil)
 		assert.LessOrEqual(t, ex.maxInFlight, 2, "--concurrency must bound the clone pool")
 		assert.Greater(t, ex.maxInFlight, 1, "--parallel must actually clone concurrently")
 	})

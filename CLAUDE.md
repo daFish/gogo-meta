@@ -69,7 +69,9 @@ internal/
 │   └── loop_test.go
 ├── output/
 │   ├── output.go          # Terminal formatting, symbols, summary
-│   └── output_test.go
+│   ├── output_test.go
+│   ├── progress.go        # TTY-only spinner/progress line for long phases
+│   └── progress_test.go
 └── ssh/
     ├── ssh.go             # SSH host extraction, known_hosts
     └── ssh_test.go

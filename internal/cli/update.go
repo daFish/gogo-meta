@@ -163,7 +163,9 @@ func runUpdate(ctx context.Context, ex executor.Executor, cwd string, opts updat
 		return 0, nil
 	}
 
+	inspecting := output.StartProgress("Inspecting working copy", 0)
 	plan, err := planMigration(ctx, ex, metaDir, cfg, selected)
+	inspecting.Stop()
 	if err != nil {
 		return 0, err
 	}
@@ -266,9 +268,13 @@ func runClonePhase(ctx context.Context, ex executor.Executor, recorder *outcomeR
 	}
 	warnUnverifiedSSHHosts(urls)
 
+	progress := output.StartProgress("Cloning", len(targets))
+	outcomes := cloneMissing(ctx, ex, metaDir, targets, opts.Parallel, opts.Concurrency, progress)
+	progress.Stop()
+
 	// A freshly cloned repository is current by construction, so it is not
 	// added to the pull set.
-	for _, o := range cloneMissing(ctx, ex, metaDir, targets, opts.Parallel, opts.Concurrency) {
+	for _, o := range outcomes {
 		if o.Err == "" {
 			recorder.record(o.Path, outcomeOK, "cloned")
 			continue
@@ -296,12 +302,19 @@ func runPullPhase(ctx context.Context, ex executor.Executor, recorder *outcomeRe
 		byDir[t.dir] = t
 	}
 
+	label := "Pulling"
+	if opts.DryRun {
+		label = "Inspecting"
+	}
+	progress := output.StartProgress(label, len(targets))
 	results := loop.RunEach(ctx, dirs, opts.Parallel, opts.Concurrency, func(ctx context.Context, dir string) (*executor.Result, error) {
 		class, message := pullProject(ctx, ex, dir, opts.DryRun)
+		progress.Advance()
 		// The outcome travels in the result rather than being recorded here, so
 		// concurrent workers never write to the recorder.
 		return &executor.Result{ExitCode: int(class), Stdout: message}, nil
 	})
+	progress.Stop()
 
 	for i, r := range results {
 		target := byDir[dirs[i]]
