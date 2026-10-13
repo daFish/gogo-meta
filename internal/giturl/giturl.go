@@ -1,5 +1,6 @@
 // Package giturl validates git remote URLs before they are handed to git,
-// blocking argument injection and dangerous remote-helper transports.
+// blocking argument injection and dangerous remote-helper transports, and
+// canonicalizes them so that two spellings of one repository compare equal.
 package giturl
 
 import (

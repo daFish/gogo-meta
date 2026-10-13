@@ -12,6 +12,7 @@ import (
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/discover"
 	"github.com/daFish/gogo-meta/internal/executor"
+	"github.com/daFish/gogo-meta/internal/giturl"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -25,10 +26,13 @@ type migrateMove struct{ from, to string }
 
 // migrationPlan buckets every selected project by what the working copy needs
 // doing to it. A project appears in exactly one bucket.
+//
+// Remotes are matched by giturl.Canonical, so a checkout cloned over ssh still
+// satisfies an https URL in the config.
 type migrationPlan struct {
 	present   []string // directory exists and its origin matches the config
 	moves     []migrateMove
-	missing   []string // no directory, and the URL was found nowhere
+	missing   []string // no directory, and no unclaimed checkout of the repository
 	ambiguous []string // no directory, and the URL was found at two or more paths
 	conflicts []migrateConflict
 }
@@ -78,7 +82,7 @@ func mapURLsToCurrentPaths(ctx context.Context, ex executor.Executor, metaDir st
 	urlToPath = map[string]string{}
 	ambiguous = map[string]bool{}
 	for _, rp := range repoPaths {
-		url := getRemoteURL(ctx, ex, filepath.Join(metaDir, rp))
+		url := giturl.Canonical(getRemoteURL(ctx, ex, filepath.Join(metaDir, rp)))
 		if url == "" {
 			continue
 		}
@@ -124,13 +128,14 @@ func planMigration(ctx context.Context, ex executor.Executor, metaDir string, cf
 	}
 
 	var plan migrationPlan
+	claimed := map[string]bool{}
 	for _, projectPath := range selected {
-		url := cfg.Projects[projectPath]
+		url := giturl.Canonical(cfg.Projects[projectPath])
 		targetDir := filepath.Join(metaDir, projectPath)
 
 		if config.FileExists(targetDir) {
 			targetRemote := getRemoteURL(ctx, ex, targetDir)
-			if targetRemote != url {
+			if giturl.Canonical(targetRemote) != url {
 				plan.conflicts = append(plan.conflicts, migrateConflict{path: projectPath, found: targetRemote})
 				continue
 			}
@@ -138,16 +143,27 @@ func planMigration(ctx context.Context, ex executor.Executor, metaDir string, cf
 			continue
 		}
 
+		source := urlToPath[url]
 		switch {
 		case ambiguousURLs[url]:
 			plan.ambiguous = append(plan.ambiguous, projectPath)
-		case urlToPath[url] != "" && urlToPath[url] != projectPath:
-			plan.moves = append(plan.moves, migrateMove{from: urlToPath[url], to: projectPath})
+		case source != "" && !claimed[source] && !ownsCheckout(cfg, source, url):
+			claimed[source] = true
+			plan.moves = append(plan.moves, migrateMove{from: source, to: projectPath})
 		default:
 			plan.missing = append(plan.missing, projectPath)
 		}
 	}
 	return plan, nil
+}
+
+// ownsCheckout reports whether the checkout at path already serves the
+// configured project of that name. Moving it would only trade one missing
+// project for another, so a config that lists one repository at two paths gets
+// a second clone instead.
+func ownsCheckout(cfg config.MetaConfig, path, canonicalURL string) bool {
+	configured, ok := cfg.Projects[path]
+	return ok && giturl.Canonical(configured) == canonicalURL
 }
 
 // applyMoves renames each working copy to its configured path and keeps the
