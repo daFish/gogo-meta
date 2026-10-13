@@ -198,6 +198,26 @@ func TestUpdateConvergesMoveCloneAndPull(t *testing.T) {
 		"a freshly cloned project is current by construction and must not be pulled")
 }
 
+func TestUpdateMovesACheckoutWhoseRemoteIsSpelledDifferently(t *testing.T) {
+	dir := setupMetaRepo(t, map[string]string{"libs/api": "/remotes/api.git/"})
+	mkGitRepo(t, dir, "old/api")
+
+	ex := &updateExecutor{repos: map[string]repoState{
+		repoDir(dir, "old/api"):  {remote: "/remotes/api.git"},
+		repoDir(dir, "libs/api"): {remote: "/remotes/api.git"},
+	}}
+
+	buf := captureOutput(t)
+	code, err := runUpdate(context.Background(), ex, dir, updateOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+
+	assert.Contains(t, buf.String(), "moved from old/api")
+	assert.NotContains(t, buf.String(), "cloned")
+	assert.NoDirExists(t, filepath.Join(dir, "old", "api"), "the original checkout must not be orphaned")
+	assert.DirExists(t, filepath.Join(dir, "libs", "api"))
+}
+
 func TestUpdatePullPolicy(t *testing.T) {
 	tests := []struct {
 		name      string
