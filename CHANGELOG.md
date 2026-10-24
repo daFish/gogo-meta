@@ -71,6 +71,18 @@ from the `projects` map in `.gogo`. `gogo validate` also no longer validates
 
 * add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
 
+## [3.3.0](https://github.com/daFish/gogo-meta/compare/v3.2.0...v3.3.0) (2026-10-24)
+
+
+### Features
+
+* **cli:** show a progress spinner while gogo update works ([8a2a4e1](https://github.com/daFish/gogo-meta/commit/8a2a4e1f0f1e8d743d1cb06af6b092d2ae767075))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/mattn/go-isatty to v0.0.24 ([20d23f6](https://github.com/daFish/gogo-meta/commit/20d23f6e32ea9b39da3fd895d0756e7e39019b0c))
+
 ## [3.2.0](https://github.com/daFish/gogo-meta/compare/v3.1.1...v3.2.0) (2026-09-11)
 
 
