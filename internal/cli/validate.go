@@ -23,10 +23,10 @@ func newValidateCmd() *cobra.Command {
 }
 
 type validationResult struct {
-	file  string
-	valid bool
-	err   string
-	cfg   *config.MetaConfig
+	file     string
+	valid    bool
+	problems []string
+	cfg      *config.MetaConfig
 }
 
 func runValidate(_ *cobra.Command, _ []string) error {
@@ -61,7 +61,9 @@ func runValidate(_ *cobra.Command, _ []string) error {
 				knownConfigs = append(knownConfigs, *r.cfg)
 			}
 		} else {
-			output.ProjectStatus(r.file, "error", r.err)
+			for _, problem := range r.problems {
+				output.ProjectStatus(r.file, "error", problem)
+			}
 			configHasErrors = true
 			reportedFiles = append(reportedFiles, filepath.Join(cwd, r.file))
 		}
@@ -117,13 +119,19 @@ func validateWorkingCopy(cwd string, knownConfigs []config.MetaConfig, reportedF
 		// checked further down, once the merge has succeeded.
 		message := err.Error()
 		var cfgErr *config.ConfigError
+		var schemaErr *config.SchemaError
 		if errors.As(err, &cfgErr) {
 			if slices.Contains(reportedFiles, cfgErr.Path) {
 				return true
 			}
-			message = cfgErr.Message
+			// Schema problems name no file of their own, so they keep the path.
+			if !errors.As(err, &schemaErr) {
+				message = cfgErr.Message
+			}
 		}
-		output.Error(message)
+		for _, line := range strings.Split(message, "\n") {
+			output.Error(line)
+		}
 		return true
 	}
 
@@ -195,16 +203,20 @@ func validateConfigFile(filePath, filename string) validationResult {
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return validationResult{file: filename, valid: false, err: err.Error()}
+		return validationResult{file: filename, valid: false, problems: []string{err.Error()}}
 	}
 
 	cfg, err := config.ParseConfigContent(content, format)
+	var schemaErr *config.SchemaError
+	if errors.As(err, &schemaErr) {
+		return validationResult{file: filename, valid: false, problems: schemaErr.Problems}
+	}
 	if err != nil {
-		return validationResult{file: filename, valid: false, err: fmt.Sprintf("Invalid %s: %v", format, err)}
+		return validationResult{file: filename, valid: false, problems: []string{fmt.Sprintf("Invalid %s: %v", format, err)}}
 	}
 
 	if err := config.Validate(*cfg); err != nil {
-		return validationResult{file: filename, valid: false, err: fmt.Sprintf("Invalid structure: %v", err)}
+		return validationResult{file: filename, valid: false, problems: []string{fmt.Sprintf("Invalid structure: %v", err)}}
 	}
 
 	return validationResult{file: filename, valid: true, cfg: cfg}

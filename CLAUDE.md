@@ -53,6 +53,9 @@ internal/
 ├── config/
 │   ├── config.go          # Types, read/write, merge, find-up, validation, overlay
 │   ├── config_test.go
+│   ├── gogo.schema.json   # JSON Schema of the config files, embedded
+│   ├── schema.go          # Schema validation, YAML conversion, error translation
+│   ├── schema_test.go
 │   ├── gitignore.go       # addToGitignore helper
 │   └── gitignore_test.go
 ├── executor/
@@ -124,6 +127,7 @@ gogo --group foo,bar exec "..."    # Filter by named group(s) from the config
 - Handle errors explicitly — no ignored return values (enforced by errcheck linter)
 - Use `fatih/color` for terminal styling (not other color libraries)
 - Custom `UnmarshalJSON` / `UnmarshalYAML` on `CommandConfig` to handle the string | object union type
+- `internal/config/gogo.schema.json` is the single definition of the config's structure (keys, types, value ranges); every config field change updates the schema in the same commit (enforced by the drift test `TestSchemaMatchesConfigStructs`), and `config.Validate` only keeps rules the schema cannot guarantee: logic such as safe paths and blank names, or effects of YAML decoding such as dropped null list items. YAML and JSON follow identical rules: YAML scalars are checked with the type YAML resolves them to (`2024` is a number, `yes` a string), never coerced to the Go field's type, and a repeated key is an error in both formats
 
 ## Testing Patterns
 
@@ -189,8 +193,9 @@ bad references when a group is actually used, and `config.ValidateReferences`
 checks them for `gogo validate` — against the *merged* config plus every config
 file found in the cwd and next to the primary one, so an overlay that was not
 loaded still counts.
-Reading stays permissive because an overlay may group projects declared in the
-base config and vice versa.
+Reading stays permissive about these cross-references because an overlay may
+group projects declared in the base config and vice versa. It is not permissive
+about unknown keys: the schema rejects them in every file, overlays included.
 
 ### Converging the working copy
 

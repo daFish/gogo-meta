@@ -204,3 +204,44 @@ func TestValidateReportsAFileProblemOnce(t *testing.T) {
 		assert.Contains(t, buf.String(), "Overlay config file not found")
 	})
 }
+
+func TestValidateReportsSchemaProblemsPerFile(t *testing.T) {
+	buf := inValidatedDir(t, map[string]string{
+		".gogo":       `{"projects":{},"commands":{"test":{"cmd":"npm test","parallell":true},"build":{"cmd":"make","concurrency":0}}}`,
+		".gogo.local": `{"group":{}}`,
+	})
+
+	require.Error(t, runValidate(nil, nil))
+	out := buf.String()
+	for _, line := range []string{
+		`.gogo commands.build.concurrency: must be >= 1 (got 0)`,
+		`.gogo commands.test: unknown key "parallell" (allowed: cmd, description, parallel, concurrency, groups, includeOnly, excludeOnly, includePattern, excludePattern)`,
+		`.gogo.local unknown key "group" (allowed: $schema, projects, ignore, groups, commands)`,
+	} {
+		assert.Equal(t, 1, strings.Count(out, line), "expected exactly one %q in:\n%s", line, out)
+	}
+	assert.NotContains(t, out, "Invalid json", "schema problems are not syntax errors")
+}
+
+func TestValidateRejectsDuplicateJSONKeys(t *testing.T) {
+	// The first "commands" would be decoded but never checked by the schema.
+	buf := inValidatedDir(t, map[string]string{
+		".gogo": `{"projects":{"api":"urlA"},"commands":{"b":{"parallel":true}},"commands":{}}`,
+	})
+	require.NoError(t, os.MkdirAll("api", 0o755))
+
+	require.Error(t, runValidate(nil, nil))
+	assert.Contains(t, buf.String(), `.gogo duplicate key "commands"`)
+}
+
+func TestValidateReportsSchemaProblemsOfAPrimaryConfigInAParentDirectory(t *testing.T) {
+	buf := inValidatedDir(t, map[string]string{".gogo": `{"projects":{},"ignores":[]}`})
+	require.NoError(t, os.MkdirAll("sub", 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join("sub", ".gogo.local"), []byte(`{"projects":{}}`), 0o644))
+	parent, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir("sub"))
+
+	require.Error(t, runValidate(nil, nil))
+	assert.Contains(t, buf.String(), filepath.Join(parent, ".gogo")+`: unknown key "ignores"`)
+}

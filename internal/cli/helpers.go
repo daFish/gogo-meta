@@ -202,18 +202,27 @@ func newShellExecutor() executor.Executor {
 // projects with opts, exiting non-zero if any project failed. Shared body of
 // the exec/git/npm loop commands.
 func runLoopCommand(ctx context.Context, command loop.CommandFn, opts loop.Options) error {
-	metaDir, err := requireMetaDir()
+	loopCtx, err := loadLoopContext()
 	if err != nil {
 		return err
+	}
+	return runLoop(ctx, command, loopCtx, opts)
+}
+
+func loadLoopContext() (loop.Context, error) {
+	metaDir, err := requireMetaDir()
+	if err != nil {
+		return loop.Context{}, err
 	}
 	cfg, err := resolveConfig()
 	if err != nil {
-		return err
+		return loop.Context{}, err
 	}
-	results, err := loop.Loop(ctx, command, loop.Context{
-		Config:  cfg.Config,
-		MetaDir: metaDir,
-	}, opts)
+	return loop.Context{Config: cfg.Config, MetaDir: metaDir}, nil
+}
+
+func runLoop(ctx context.Context, command loop.CommandFn, loopCtx loop.Context, opts loop.Options) error {
+	results, err := loop.Loop(ctx, command, loopCtx, opts)
 	if err != nil {
 		return err
 	}
