@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,4 +47,26 @@ func TestProjectCreateDoesNotPersistLocalOverlayProjects(t *testing.T) {
 	require.Contains(t, written, "newrepo")
 	require.NotContains(t, written, "personal",
 		"project create must not persist .gogo.local-only projects into the shared .gogo")
+}
+
+func TestProjectCreateKeepsSchemaReference(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	const schemaURL = "https://raw.githubusercontent.com/daFish/gogo-meta/v1.0.0/internal/config/gogo.schema.json"
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"),
+		[]byte(`{"$schema":"`+schemaURL+`","projects":{}}`), 0o644))
+	_ = captureOutput(t)
+	initTestChdir(t, dir)
+
+	cmd := newProjectCreateCmd()
+	cmd.SetArgs([]string{"newrepo", "git@example.com:org/newrepo.git"})
+	require.NoError(t, cmd.Execute())
+
+	written, err := os.ReadFile(filepath.Join(dir, ".gogo"))
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(string(written), "{\n  \"$schema\": \""+schemaURL+"\",\n"),
+		"$schema must survive the rewrite as the first key:\n%s", written)
+	assert.Contains(t, string(written), `"newrepo": "git@example.com:org/newrepo.git"`)
 }

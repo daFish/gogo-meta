@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gogo config",
+  "description": "Configuration of a gogo meta repository: .gogo, .gogo.yaml, .gogo.yml, their .gogo.local siblings and overlays merged with -f.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "URL of this schema, for editor support. Ignored by gogo.",
+      "type": ["string", "null"]
+    },
+    "projects": {
+      "description": "Child repositories: project path relative to the meta repository, mapped to its git URL.",
+      "type": ["object", "null"],
+      "additionalProperties": {
+        "type": ["string", "null"]
+      }
+    },
+    "ignore": {
+      "description": "Paths ignored when gogo walks the meta repository. Defaults to .git, node_modules, .vagrant and .vscode.",
+      "type": ["array", "null"],
+      "items": {
+        "type": ["string", "null"]
+      }
+    },
+    "groups": {
+      "description": "Named sets of project paths, targetable with --group.",
+      "type": ["object", "null"],
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "commands": {
+      "description": "Predefined commands for gogo run: a shell command, or an object with the command and its defaults.",
+      "type": ["object", "null"],
+      "additionalProperties": {
+        "type": ["string", "object"],
+        "minLength": 1,
+        "additionalProperties": false,
+        "required": ["cmd"],
+        "properties": {
+          "cmd": {
+            "description": "Shell command run in every selected project.",
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "description": "Shown by gogo run without arguments.",
+            "type": ["string", "null"]
+          },
+          "parallel": {
+            "description": "Run in all projects at once instead of one after another.",
+            "type": ["boolean", "null"]
+          },
+          "concurrency": {
+            "description": "Maximum number of projects run at once when parallel.",
+            "type": ["integer", "null"],
+            "minimum": 1,
+            "maximum": 9223372036854775807
+          },
+          "groups": {
+            "description": "Only run in the projects of these groups.",
+            "type": ["array", "null"],
+            "items": {
+              "type": ["string", "null"]
+            }
+          },
+          "includeOnly": {
+            "description": "Only run in these project paths.",
+            "type": ["array", "null"],
+            "items": {
+              "type": ["string", "null"]
+            }
+          },
+          "excludeOnly": {
+            "description": "Skip these project paths.",
+            "type": ["array", "null"],
+            "items": {
+              "type": ["string", "null"]
+            }
+          },
+          "includePattern": {
+            "description": "Only run in project paths matching this regular expression.",
+            "type": ["string", "null"]
+          },
+          "excludePattern": {
+            "description": "Skip project paths matching this regular expression.",
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  }
+}

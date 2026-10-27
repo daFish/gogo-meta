@@ -97,8 +97,10 @@ func (c CommandConfig) MarshalYAML() (any, error) {
 	return Alias(c), nil
 }
 
-// MetaConfig represents the .gogo configuration file.
+// MetaConfig represents the .gogo configuration file. Its structure is defined
+// by gogo.schema.json; the drift test keeps the two in step.
 type MetaConfig struct {
+	Schema   string                   `json:"$schema,omitempty" yaml:"$schema,omitempty"`
 	Projects map[string]string        `json:"projects" yaml:"projects"`
 	Ignore   []string                 `json:"ignore" yaml:"ignore"`
 	Groups   map[string][]string      `json:"groups,omitempty" yaml:"groups,omitempty"`
@@ -125,13 +127,57 @@ type AppliedOverlay struct {
 type ConfigError struct {
 	Message string
 	Path    string
+	Err     error
 }
 
+// Error attributes schema problems to the file one per line, as
+// "<path>: <problem>", with the path relative to the working directory when
+// the file lies inside it.
 func (e *ConfigError) Error() string {
+	var schemaErr *SchemaError
+	if e.Path != "" && errors.As(e.Err, &schemaErr) {
+		prefix := displayPath(e.Path) + ": "
+		return prefix + strings.Join(schemaErr.Problems, "\n"+prefix)
+	}
 	if e.Path != "" {
 		return fmt.Sprintf("%s: %s", e.Path, e.Message)
 	}
 	return e.Message
+}
+
+func (e *ConfigError) Unwrap() error {
+	return e.Err
+}
+
+func displayPath(path string) string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return path
+	}
+	rel, err := filepath.Rel(cwd, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return path
+	}
+	return rel
+}
+
+// parseError wraps an error from parseContent for the file at path. Schema
+// problems keep their own location; any other error keeps the description of
+// the file it was found in.
+func parseError(path, description string, err error) *ConfigError {
+	var schemaErr *SchemaError
+	if errors.As(err, &schemaErr) {
+		return &ConfigError{
+			Message: schemaErr.Error(),
+			Path:    path,
+			Err:     schemaErr,
+		}
+	}
+	return &ConfigError{
+		Message: fmt.Sprintf("%s: %v", description, err),
+		Path:    path,
+		Err:     err,
+	}
 }
 
 // ResolvedCommand is a command after normalization.
@@ -174,7 +220,14 @@ func LocalFilenameForPrimary(primaryFilename string) string {
 
 var LocalOverlayNames = []string{".gogo.local", ".gogo.local.yaml", ".gogo.local.yml"}
 
+// parseContent validates raw config content against the config schema and
+// then decodes it. The decoders stay permissive: anything they would silently
+// drop, such as an unknown key, has already been rejected by the schema.
 func parseContent(content []byte, format ConfigFormat) (*MetaConfig, error) {
+	if err := validateConfigDocument(content, format); err != nil {
+		return nil, err
+	}
+
 	var config MetaConfig
 	var err error
 	if format == FormatYAML {
@@ -220,7 +273,12 @@ func IsSafeProjectPath(p string) bool {
 	return !strings.HasPrefix(c, ".."+string(filepath.Separator))
 }
 
-// Validate checks that a MetaConfig is valid.
+// Validate checks the rules of a MetaConfig that need logic rather than shape.
+// Types, required keys and value ranges are defined by gogo.schema.json, which
+// every config passes before it gets here: files when they are parsed, configs
+// built in memory when WriteMetaConfig serializes them. A group without
+// members stays here because yaml.v3 drops null list items only after the
+// schema has counted them.
 func Validate(config MetaConfig) error {
 	if config.Projects == nil {
 		return errors.New("projects is required")
@@ -244,12 +302,6 @@ func Validate(config MetaConfig) error {
 		}
 	}
 	for name, cmd := range config.Commands {
-		if cmd.Cmd == "" {
-			return fmt.Errorf("command %q: cmd is required", name)
-		}
-		if cmd.Concurrency != nil && *cmd.Concurrency <= 0 {
-			return fmt.Errorf("command %q: concurrency must be a positive integer", name)
-		}
 		for _, group := range cmd.Groups {
 			if strings.TrimSpace(group) == "" {
 				return fmt.Errorf("command %q: group names must not be empty", name)
@@ -436,10 +488,7 @@ func ReadOverlayConfig(filePath string) (*MetaConfig, error) {
 
 	config, err := parseContent(content, format)
 	if err != nil {
-		return nil, &ConfigError{
-			Message: fmt.Sprintf("Invalid overlay config file: %v", err),
-			Path:    filePath,
-		}
+		return nil, parseError(filePath, "Invalid overlay config file", err)
 	}
 
 	if err := Validate(*config); err != nil {
@@ -477,10 +526,7 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 
 	config, err := parseContent(content, format)
 	if err != nil {
-		return nil, &ConfigError{
-			Message: fmt.Sprintf("Invalid config file: %v", err),
-			Path:    metaPath,
-		}
+		return nil, parseError(metaPath, "Invalid config file", err)
 	}
 
 	if err := Validate(*config); err != nil {
@@ -549,19 +595,23 @@ func ReadMetaConfig(cwd string, extraOverlayFiles []string) (*MetaConfigResult, 
 	}, nil
 }
 
-// WriteMetaConfig writes a config file in the specified format.
+// WriteMetaConfig writes a config file in the specified format. The
+// serialized content passes the same checks as a config that is read, so gogo
+// never writes a file it would refuse to load.
 func WriteMetaConfig(dir string, config MetaConfig, format ConfigFormat) error {
+	content, err := serializeContent(&config, format)
+	if err != nil {
+		return fmt.Errorf("failed to serialize config: %w", err)
+	}
+	if err := validateConfigDocument(content, format); err != nil {
+		return err
+	}
 	if err := Validate(config); err != nil {
 		return err
 	}
 
 	filename := FilenameForFormat(format)
 	metaPath := filepath.Join(dir, filename)
-
-	content, err := serializeContent(&config, format)
-	if err != nil {
-		return fmt.Errorf("failed to serialize config: %w", err)
-	}
 
 	return os.WriteFile(metaPath, content, 0o644)
 }
@@ -618,6 +668,7 @@ func MergeConfigs(base, overlay MetaConfig) MetaConfig {
 	}
 
 	return MetaConfig{
+		Schema:   base.Schema,
 		Projects: projects,
 		Ignore:   ignore,
 		Groups:   groups,
@@ -641,6 +692,7 @@ func AddProject(config MetaConfig, path, url string) MetaConfig {
 	}
 	projects[path] = url
 	return MetaConfig{
+		Schema:   config.Schema,
 		Projects: projects,
 		Ignore:   config.Ignore,
 		Groups:   config.Groups,
@@ -695,6 +747,7 @@ func RemoveProject(config MetaConfig, path string) MetaConfig {
 	}
 
 	return MetaConfig{
+		Schema:   config.Schema,
 		Projects: projects,
 		Ignore:   config.Ignore,
 		Groups:   groups,
@@ -817,8 +870,9 @@ func ListCommands(config MetaConfig) []CommandEntry {
 	return entries
 }
 
-// ParseConfigContent parses raw content (JSON or YAML) into a MetaConfig.
-// Exported for use by the validate command.
+// ParseConfigContent validates raw content (JSON or YAML) against the config
+// schema and parses it into a MetaConfig. Schema violations are returned as a
+// *SchemaError. Exported for use by the validate command.
 func ParseConfigContent(content []byte, format ConfigFormat) (*MetaConfig, error) {
 	return parseContent(content, format)
 }

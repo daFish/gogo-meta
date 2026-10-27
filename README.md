@@ -114,6 +114,8 @@ The config file defines child repositories, ignore patterns, and predefined comm
 
 gogo looks for config files in the following order of precedence: `.gogo` (JSON) > `.gogo.yaml` > `.gogo.yml`. The first file found is used.
 
+> **Note:** every config file is validated against the [config schema](#schema) before gogo uses it. A file with an unknown key, a value of the wrong type or a repeated key is rejected, and gogo runs nothing until it is fixed.
+
 #### JSON format (.gogo)
 
 ```json
@@ -190,6 +192,53 @@ commands:
     cmd: npm run migrate
     groups:
       - backend
+```
+
+### Schema
+
+Every config file is validated against a JSON Schema,
+[`internal/config/gogo.schema.json`](internal/config/gogo.schema.json), before
+gogo uses it: the primary config, `.gogo.local` and every `-f` overlay, in
+both formats. The schema is the one definition of the config's keys, their
+types and their allowed values. Unknown keys are an error at every level, so a
+typo such as `paralel` or `group:` fails loudly instead of being silently
+ignored. `gogo validate` reports such a file as an error, and every other
+command refuses to run until it is fixed. The messages name the file, the
+location in it and what is wrong:
+
+```text
+$ gogo git status
+✗ .gogo: unknown key "group" (allowed: $schema, projects, ignore, groups, commands)
+✗ .gogo: commands.build.concurrency: must be >= 1 (got 0)
+✗ .gogo: commands.test: unknown key "paralel" (allowed: cmd, description, parallel, concurrency, groups, includeOnly, excludeOnly, includePattern, excludePattern)
+```
+
+`gogo validate` lists the same problems under each file it checks.
+
+JSON and YAML files follow the same rules. A value must have the type the
+schema gives its key, in both formats, so in YAML quote anything that should be
+a string but reads as a number or a boolean (`"2024"`, `"true"`), and write
+booleans as `true`/`false`, not `yes`/`no`. A key may appear only once in each
+object, in JSON as in YAML.
+
+The schema is published with every release from v4.0.0 on, so editors can
+offer completion and inline errors for the gogo version you have installed
+(`gogo --version`).
+Reference it from a JSON config with the `$schema` key, which gogo accepts and
+keeps when it rewrites the file:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/daFish/gogo-meta/v<version>/internal/config/gogo.schema.json",
+  "projects": {}
+}
+```
+
+In YAML, use a `yaml-language-server` comment:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/daFish/gogo-meta/v<version>/internal/config/gogo.schema.json
+projects: {}
 ```
 
 ### Groups
@@ -273,7 +322,7 @@ The ignore destination mirrors the config layer, so personal choices never pollu
 
 > If a `.gogo.local.*` file exists in a format that doesn't match the primary (e.g. `.gogo.local.yaml` beside a JSON `.gogo`), gogo prints a warning that it will not be merged.
 
-> **Note:** the merged config is the effective config — a `.gogo.local` with invalid JSON/YAML makes **every** gogo command fail until you fix or remove the file. gogo fails loudly here on purpose: silently ignoring a broken overlay would run commands against a different project set than you think you have.
+> **Note:** the merged config is the effective config — a `.gogo.local` with invalid JSON/YAML, or with a key the [schema](#schema) does not know, makes **every** gogo command fail until you fix or remove the file. gogo fails loudly here on purpose: silently ignoring a broken overlay would run commands against a different project set than you think you have.
 
 Because gogo finds `.gogo.local` on its own, it gets the same ownership check as the primary config: a `.gogo.local` owned by another user is refused rather than merged. See [SECURITY.md](SECURITY.md).
 
@@ -692,7 +741,7 @@ Validate all config files in the current directory.
 gogo validate
 ```
 
-Checks `.gogo`, `.gogo.yaml`, and `.gogo.yml` files for valid syntax and structure.
+Checks `.gogo`, `.gogo.yaml`, and `.gogo.yml` files for valid syntax and validates them against the [config schema](#schema): unknown keys, wrong types and out-of-range values are reported with their location.
 
 ---
 

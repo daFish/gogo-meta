@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/daFish/gogo-meta/internal/cli"
@@ -17,7 +18,9 @@ func main() {
 	rootCmd := cli.NewRootCommand(version.Info())
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		stop()
-		output.Error(err.Error())
+		for _, line := range strings.Split(err.Error(), "\n") {
+			output.Error(line)
+		}
 		os.Exit(1)
 	}
 	stop()
