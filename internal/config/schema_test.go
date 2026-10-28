@@ -59,6 +59,7 @@ func TestSchemaMatchesConfigStructs(t *testing.T) {
 	}{
 		{"MetaConfig", reflect.TypeFor[MetaConfig](), nil},
 		{"CommandConfig", reflect.TypeFor[CommandConfig](), []string{"properties", "commands", "additionalProperties"}},
+		{"ExecutionConfig", reflect.TypeFor[ExecutionConfig](), []string{"properties", "execution"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -183,7 +184,7 @@ func TestSchemaRejectsConfigFiles(t *testing.T) {
 			name: "unknown top-level key",
 			json: `{"projects":{},"group":{"backend":["api"]}}`,
 			yaml: "projects: {}\ngroup:\n  backend: [api]\n",
-			want: `unknown key "group" (allowed: $schema, projects, ignore, groups, commands)`,
+			want: `unknown key "group" (allowed: $schema, projects, ignore, groups, commands, execution)`,
 		},
 		{
 			name: "unknown key in the object form of a command",
@@ -208,6 +209,48 @@ func TestSchemaRejectsConfigFiles(t *testing.T) {
 			json: `{"commands":{"build":{"parallel":true}}}`,
 			yaml: "commands:\n  build:\n    parallel: true\n",
 			want: `commands.build: missing required key "cmd"`,
+		},
+		{
+			name: "unknown key in the execution block",
+			json: `{"execution":{"mdoe":"sequential"}}`,
+			yaml: "execution:\n  mdoe: sequential\n",
+			want: `execution: unknown key "mdoe" (allowed: mode, concurrency)`,
+		},
+		{
+			name: "misspelled execution block",
+			json: `{"executoin":{"mode":"sequential"}}`,
+			yaml: "executoin:\n  mode: sequential\n",
+			want: `unknown key "executoin" (allowed: $schema, projects, ignore, groups, commands, execution)`,
+		},
+		{
+			name: "unknown execution mode",
+			json: `{"execution":{"mode":"serial"}}`,
+			yaml: "execution:\n  mode: serial\n",
+			want: `execution.mode: must be one of "parallel", "sequential" (got "serial")`,
+		},
+		{
+			name: "execution concurrency below one",
+			json: `{"execution":{"concurrency":0}}`,
+			yaml: "execution:\n  concurrency: 0\n",
+			want: `execution.concurrency: must be >= 1 (got 0)`,
+		},
+		{
+			name: "fractional execution concurrency",
+			json: `{"execution":{"concurrency":2.5}}`,
+			yaml: "execution:\n  concurrency: 2.5\n",
+			want: `execution.concurrency: must be an integer (got 2.5)`,
+		},
+		{
+			name: "quoted execution concurrency",
+			json: `{"execution":{"concurrency":"2"}}`,
+			yaml: "execution:\n  concurrency: \"2\"\n",
+			want: `execution.concurrency: must be an integer (got "2")`,
+		},
+		{
+			name: "execution block that is not a map",
+			json: `{"execution":"sequential"}`,
+			yaml: "execution: sequential\n",
+			want: `execution: must be a map (got "sequential")`,
 		},
 	}
 
@@ -243,7 +286,8 @@ func TestSchemaAcceptsConfigFiles(t *testing.T) {
   "commands": {
     "build": "make",
     "release.all": {"cmd": "make release", "parallel": true, "concurrency": 2, "groups": ["my group"]}
-  }
+  },
+  "execution": {"mode": "sequential", "concurrency": 3}
 }`,
 		FormatYAML: `$schema: ` + schemaURL + `
 projects:
@@ -258,6 +302,9 @@ commands:
     parallel: true
     concurrency: 2
     groups: [my group]
+execution:
+  mode: sequential
+  concurrency: 3
 `,
 	}
 
@@ -274,6 +321,7 @@ commands:
 				assert.Equal(t, "make release", cfg.Commands["release.all"].Cmd)
 				require.NotNil(t, cfg.Commands["release.all"].Concurrency)
 				assert.Equal(t, 2, *cfg.Commands["release.all"].Concurrency)
+				assert.Equal(t, &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(3)}, cfg.Execution)
 			})
 		}
 	}
@@ -310,8 +358,12 @@ func TestSchemaKeepsWhatLoadedBefore(t *testing.T) {
 		{"YAML comment only", FormatYAML, "# nothing yet\n", empty},
 		{"YAML null document", FormatYAML, "~\n", empty},
 		{"JSON null document", FormatJSON, "null", empty},
-		{"YAML keys without values", FormatYAML, "$schema:\nprojects:\nignore:\ngroups:\ncommands:\n", empty},
-		{"JSON null values", FormatJSON, `{"$schema":null,"projects":null,"ignore":null,"groups":null,"commands":null}`, empty},
+		{"YAML keys without values", FormatYAML, "$schema:\nprojects:\nignore:\ngroups:\ncommands:\nexecution:\n", empty},
+		{"JSON null values", FormatJSON, `{"$schema":null,"projects":null,"ignore":null,"groups":null,"commands":null,"execution":null}`, empty},
+		{"YAML empty execution block", FormatYAML, "execution: {}\n", defaults(MetaConfig{Execution: &ExecutionConfig{}})},
+		{"JSON empty execution block", FormatJSON, `{"execution":{}}`, defaults(MetaConfig{Execution: &ExecutionConfig{}})},
+		{"YAML execution keys without values", FormatYAML, "execution:\n  mode:\n  concurrency:\n", defaults(MetaConfig{Execution: &ExecutionConfig{}})},
+		{"JSON null execution keys", FormatJSON, `{"execution":{"mode":null,"concurrency":null}}`, defaults(MetaConfig{Execution: &ExecutionConfig{}})},
 		{
 			"YAML non-string project paths keep their spelling", FormatYAML,
 			"projects:\n  2024: u1\n  true: u2\n  1.0: u3\n  0x10: u4\n",
@@ -416,7 +468,7 @@ func TestSchemaRejectsKeysTheDecoderUsedToIgnore(t *testing.T) {
 	}{
 		{
 			"JSON key in another case", FormatJSON, `{"Projects":{"a":"u"}}`,
-			[]string{`unknown key "Projects" (allowed: $schema, projects, ignore, groups, commands)`},
+			[]string{`unknown key "Projects" (allowed: $schema, projects, ignore, groups, commands, execution)`},
 		},
 		{
 			"JSON command key in another case", FormatJSON, `{"commands":{"b":{"cmd":"x","Parallel":true}}}`,
@@ -424,11 +476,11 @@ func TestSchemaRejectsKeysTheDecoderUsedToIgnore(t *testing.T) {
 		},
 		{
 			"YAML numeric top-level key", FormatYAML, "projects: {}\n2024: x\n",
-			[]string{`unknown key "2024" (allowed: $schema, projects, ignore, groups, commands)`},
+			[]string{`unknown key "2024" (allowed: $schema, projects, ignore, groups, commands, execution)`},
 		},
 		{
 			"YAML anchor holder key", FormatYAML, "x-defaults: &d {cmd: a}\ncommands:\n  t:\n    <<: *d\n",
-			[]string{`unknown key "x-defaults" (allowed: $schema, projects, ignore, groups, commands)`},
+			[]string{`unknown key "x-defaults" (allowed: $schema, projects, ignore, groups, commands, execution)`},
 		},
 		{
 			"YAML unknown key merged into a command", FormatYAML, "commands:\n  base: &b {cmd: x, parallell: true}\n  t:\n    <<: *b\n",
@@ -512,8 +564,8 @@ func TestSchemaErrorMessages(t *testing.T) {
 			"every problem, ordered by location", FormatJSON,
 			`{"commands":{"b":{"cmd":"x","parallell":true},"a":{"cmd":""}},"ignores":[],"group":{}}`,
 			[]string{
-				`unknown key "group" (allowed: $schema, projects, ignore, groups, commands)`,
-				`unknown key "ignores" (allowed: $schema, projects, ignore, groups, commands)`,
+				`unknown key "group" (allowed: $schema, projects, ignore, groups, commands, execution)`,
+				`unknown key "ignores" (allowed: $schema, projects, ignore, groups, commands, execution)`,
 				`commands.a.cmd: must not be empty`,
 				`commands.b: unknown key "parallell" (allowed: cmd, description, parallel, concurrency, groups, includeOnly, excludeOnly, includePattern, excludePattern)`,
 			},
@@ -528,6 +580,7 @@ func TestSchemaErrorMessages(t *testing.T) {
 		},
 		{"either of several types", FormatYAML, "commands:\n  b: [make]\n", []string{`commands.b: must be a string or a map (got a list)`}},
 		{"null is not offered as a fix", FormatYAML, "commands:\n  b: {cmd: x, parallel: maybe}\n", []string{`commands.b.parallel: must be a boolean (got "maybe")`}},
+		{"null is not offered as an allowed value", FormatYAML, "execution:\n  mode: 5\n", []string{`execution.mode: must be one of "parallel", "sequential" (got 5)`}},
 		{"null where a value is needed", FormatYAML, "commands:\n  b:\n", []string{`commands.b: must be a string or a map (got null)`}},
 		{"JSON is strict about types", FormatJSON, `{"commands":{"b":{"cmd":"x","parallel":"yes","concurrency":2.5}}}`, []string{
 			`commands.b.concurrency: must be an integer (got 2.5)`,
@@ -547,7 +600,7 @@ func TestSchemaErrorMessages(t *testing.T) {
 		}},
 		{"JSON integer written as a float", FormatJSON, `{"commands":{"b":{"cmd":"x","concurrency":2.0}}}`, []string{`commands.b.concurrency: must be an integer (got 2.0)`}},
 		{"JSON integer written as a float, next to another problem", FormatJSON, `{"bogus":1,"commands":{"b":{"cmd":"x","concurrency":2.0}}}`, []string{
-			`unknown key "bogus" (allowed: $schema, projects, ignore, groups, commands)`,
+			`unknown key "bogus" (allowed: $schema, projects, ignore, groups, commands, execution)`,
 			`commands.b.concurrency: must be an integer (got 2.0)`,
 		}},
 		{"JSON integer out of range", FormatJSON, `{"commands":{"b":{"cmd":"x","concurrency":99999999999999999999}}}`, []string{`commands.b.concurrency: must be <= 9223372036854775807 (got 99999999999999999999)`}},
@@ -652,6 +705,7 @@ func TestSchemaErrorTranslationOfOtherKeywords(t *testing.T) {
       "type": "object",
       "properties": {
         "mode": {"enum": ["parallel", "sequential"]},
+        "unset": {"enum": [null]},
         "limit": {"type": "integer", "maximum": 8},
         "name": {"type": "string", "minLength": 3, "pattern": "^[a-z]+$"}
       }
@@ -660,13 +714,14 @@ func TestSchemaErrorTranslationOfOtherKeywords(t *testing.T) {
 }`))
 	require.NoError(t, err)
 
-	document := map[string]any{"execution": map[string]any{"mode": "parallell", "limit": float64(9), "name": "A"}}
+	document := map[string]any{"execution": map[string]any{"mode": "parallell", "unset": "x", "limit": float64(9), "name": "A"}}
 	err = schema.validate(document)
 	assert.Equal(t, []string{
 		`execution.limit: must be <= 8 (got 9)`,
 		`execution.mode: must be one of "parallel", "sequential" (got "parallell")`,
 		`execution.name: is not valid`,
 		`execution.name: must be at least 3 characters long`,
+		`execution.unset: must be one of null (got "x")`,
 	}, schemaProblems(t, err))
 }
 

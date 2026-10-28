@@ -145,8 +145,8 @@ func TestRunLoopCommandWithGroup(t *testing.T) {
 	setupGroupRepo(t)
 	_ = captureOutput(t)
 
-	opts, err := resolveLoopOptions(filterCmd(t, map[string]string{"group": "foo"}))
-	require.NoError(t, err)
+	cmd := filterCmd(t, map[string]string{"group": "foo"})
+	cmd.SetContext(context.Background())
 
 	var mu sync.Mutex
 	var ran []string
@@ -157,24 +157,27 @@ func TestRunLoopCommandWithGroup(t *testing.T) {
 		return &executor.Result{ExitCode: 0}, nil
 	})
 
-	require.NoError(t, runLoopCommand(context.Background(), command, opts))
-	assert.Equal(t, []string{"a", "b"}, ran)
+	require.NoError(t, runLoopCommand(cmd, command))
+	assert.ElementsMatch(t, []string{"a", "b"}, ran)
 }
 
 func TestRunLoopCommandGroupIntersectsWithIncludeOnly(t *testing.T) {
 	setupGroupRepo(t)
 	_ = captureOutput(t)
 
-	opts, err := resolveLoopOptions(filterCmd(t, map[string]string{"group": "foo", "include-only": "b,c"}))
-	require.NoError(t, err)
+	cmd := filterCmd(t, map[string]string{"group": "foo", "include-only": "b,c"})
+	cmd.SetContext(context.Background())
 
+	var mu sync.Mutex
 	var ran []string
 	command := loop.CommandFn(func(_ context.Context, _, projectPath string) (*executor.Result, error) {
+		mu.Lock()
 		ran = append(ran, projectPath)
+		mu.Unlock()
 		return &executor.Result{ExitCode: 0}, nil
 	})
 
-	require.NoError(t, runLoopCommand(context.Background(), command, opts))
+	require.NoError(t, runLoopCommand(cmd, command))
 	assert.Equal(t, []string{"b"}, ran)
 }
 

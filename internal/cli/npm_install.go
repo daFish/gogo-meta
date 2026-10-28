@@ -18,11 +18,7 @@ func newNpmInstallCmd() *cobra.Command {
 }
 
 func runNpmInstall(cmd *cobra.Command, _ []string) error {
-	opts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "npm", "install"), opts)
+	return runLoopCommand(cmd, loop.ArgsCommand(newShellExecutor(), "npm", "install"))
 }
 
 func newNpmCiCmd() *cobra.Command {
@@ -37,9 +33,5 @@ func newNpmCiCmd() *cobra.Command {
 }
 
 func runNpmCi(cmd *cobra.Command, _ []string) error {
-	opts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "npm", "ci"), opts)
+	return runLoopCommand(cmd, loop.ArgsCommand(newShellExecutor(), "npm", "ci"))
 }

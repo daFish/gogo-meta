@@ -20,13 +20,12 @@ import (
 const allPhasesDisabledMsg = "nothing to do: all phases disabled"
 
 type updateOptions struct {
-	Filter      filter.Options
-	Parallel    bool
-	Concurrency int
-	DryRun      bool
-	NoMigrate   bool
-	NoClone     bool
-	NoPull      bool
+	Filter    filter.Options
+	Execution executionFlags
+	DryRun    bool
+	NoMigrate bool
+	NoClone   bool
+	NoPull    bool
 }
 
 type outcomeClass int
@@ -66,22 +65,25 @@ is merged, rebased or stashed, and no branch is switched.`,
 			if err != nil {
 				return err
 			}
+			execution, err := readExecutionFlags(cmd)
+			if err != nil {
+				return err
+			}
 			cwd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
 
 			opts := updateOptions{
-				Filter:      filterOpts,
-				Parallel:    getBoolFlag(cmd, "parallel"),
-				Concurrency: getIntFlag(cmd, "concurrency"),
-				DryRun:      getBoolFlag(cmd, "dry-run"),
-				NoMigrate:   getBoolFlag(cmd, "no-migrate"),
-				NoClone:     getBoolFlag(cmd, "no-clone"),
-				NoPull:      getBoolFlag(cmd, "no-pull"),
+				Filter:    filterOpts,
+				Execution: execution,
+				DryRun:    getBoolFlag(cmd, "dry-run"),
+				NoMigrate: getBoolFlag(cmd, "no-migrate"),
+				NoClone:   getBoolFlag(cmd, "no-clone"),
+				NoPull:    getBoolFlag(cmd, "no-pull"),
 			}
 
-			code, err := runUpdate(cmd.Context(), executor.NewShellExecutor(), cwd, opts)
+			code, err := runUpdate(cmd.Context(), newShellExecutor(), cwd, opts)
 			if err != nil {
 				return err
 			}
@@ -150,6 +152,7 @@ func runUpdate(ctx context.Context, ex executor.Executor, cwd string, opts updat
 	}
 	printOverlayInfo(result)
 	cfg := result.Config
+	parallel, concurrency := opts.Execution.resolve(cfg, nil)
 
 	// Filter-independent, and done before anything else: dropping a project
 	// from .gogo.local must prune its stale exclude entry either way.
@@ -181,8 +184,8 @@ func runUpdate(ctx context.Context, ex executor.Executor, cwd string, opts updat
 	}
 
 	pullTargets = runMovePhase(recorder, plan, opts, metaDir, result.LocalProjects, pullTargets)
-	runClonePhase(ctx, ex, recorder, plan, opts, metaDir, cfg)
-	runPullPhase(ctx, ex, recorder, opts, pullTargets)
+	runClonePhase(ctx, ex, recorder, plan, opts, parallel, concurrency, metaDir, cfg)
+	runPullPhase(ctx, ex, recorder, opts, parallel, concurrency, pullTargets)
 
 	return reportUpdate(recorder.outcomes(), opts), nil
 }
@@ -237,7 +240,7 @@ func runMovePhase(recorder *outcomeRecorder, plan migrationPlan, opts updateOpti
 	return pullTargets
 }
 
-func runClonePhase(ctx context.Context, ex executor.Executor, recorder *outcomeRecorder, plan migrationPlan, opts updateOptions, metaDir string, cfg config.MetaConfig) {
+func runClonePhase(ctx context.Context, ex executor.Executor, recorder *outcomeRecorder, plan migrationPlan, opts updateOptions, parallel bool, concurrency int, metaDir string, cfg config.MetaConfig) {
 	for _, path := range plan.ambiguous {
 		recorder.record(path, outcomeFailed, "multiple working-copy directories share its repository URL — resolve manually")
 	}
@@ -269,7 +272,7 @@ func runClonePhase(ctx context.Context, ex executor.Executor, recorder *outcomeR
 	warnUnverifiedSSHHosts(urls)
 
 	progress := output.StartProgress("Cloning", len(targets))
-	outcomes := cloneMissing(ctx, ex, metaDir, targets, opts.Parallel, opts.Concurrency, progress)
+	outcomes := cloneMissing(ctx, ex, metaDir, targets, parallel, concurrency, progress)
 	progress.Stop()
 
 	// A freshly cloned repository is current by construction, so it is not
@@ -283,7 +286,7 @@ func runClonePhase(ctx context.Context, ex executor.Executor, recorder *outcomeR
 	}
 }
 
-func runPullPhase(ctx context.Context, ex executor.Executor, recorder *outcomeRecorder, opts updateOptions, targets []pullTarget) {
+func runPullPhase(ctx context.Context, ex executor.Executor, recorder *outcomeRecorder, opts updateOptions, parallel bool, concurrency int, targets []pullTarget) {
 	if len(targets) == 0 {
 		return
 	}
@@ -307,7 +310,7 @@ func runPullPhase(ctx context.Context, ex executor.Executor, recorder *outcomeRe
 		label = "Inspecting"
 	}
 	progress := output.StartProgress(label, len(targets))
-	results := loop.RunEach(ctx, dirs, opts.Parallel, opts.Concurrency, func(ctx context.Context, dir string) (*executor.Result, error) {
+	results := loop.RunEach(ctx, dirs, parallel, concurrency, func(ctx context.Context, dir string) (*executor.Result, error) {
 		class, message := pullProject(ctx, ex, dir, opts.DryRun)
 		progress.Advance()
 		// The outcome travels in the result rather than being recorded here, so

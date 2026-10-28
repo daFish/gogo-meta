@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -469,4 +470,265 @@ func TestRunEachEmptyItems(t *testing.T) {
 			return nil, nil
 		})
 	assert.Empty(t, results)
+}
+
+// syncWriter collects output written by concurrent goroutines and signals
+// every write, so a test can wait for a block to appear without sleeping.
+type syncWriter struct {
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	wrote chan struct{}
+}
+
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	select {
+	case w.wrote <- struct{}{}:
+	default:
+	}
+	return n, err
+}
+
+func (w *syncWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+func (w *syncWriter) waitFor(t *testing.T, what string, cond func(out string) bool) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for !cond(w.String()) {
+		select {
+		case <-w.wrote:
+		case <-deadline:
+			t.Fatalf("timed out waiting for %s, output so far:\n%s", what, w.String())
+		}
+	}
+}
+
+func captureOutput(t *testing.T) *syncWriter {
+	t.Helper()
+	w := &syncWriter{wrote: make(chan struct{}, 1)}
+	origW, origE := output.Writer, output.ErrWriter
+	output.Writer, output.ErrWriter = w, w
+	t.Cleanup(func() { output.Writer, output.ErrWriter = origW, origE })
+	return w
+}
+
+// gatedProjects holds every project's command until the test releases it, so
+// a test decides the order in which projects finish.
+type gatedProjects struct {
+	names    []string
+	release  map[string]chan struct{}
+	returned chan string
+}
+
+func newGatedProjects(names ...string) *gatedProjects {
+	g := &gatedProjects{
+		names:    names,
+		release:  make(map[string]chan struct{}, len(names)),
+		returned: make(chan string, len(names)),
+	}
+	for _, name := range names {
+		g.release[name] = make(chan struct{})
+	}
+	return g
+}
+
+// command prints "out:<project>" and fails the projects listed in failing
+// with "err:<project>" on stderr.
+func (g *gatedProjects) command(failing ...string) CommandFn {
+	return func(_ context.Context, _, projectPath string) (*executor.Result, error) {
+		<-g.release[projectPath]
+		defer func() { g.returned <- projectPath }()
+		for _, f := range failing {
+			if f == projectPath {
+				return &executor.Result{ExitCode: 1, Stdout: "out:" + projectPath, Stderr: "err:" + projectPath}, nil
+			}
+		}
+		return &executor.Result{ExitCode: 0, Stdout: "out:" + projectPath}, nil
+	}
+}
+
+func (g *gatedProjects) finish(t *testing.T, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		close(g.release[name])
+		select {
+		case got := <-g.returned:
+			require.Equal(t, name, got)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for %s to finish", name)
+		}
+	}
+}
+
+func (g *gatedProjects) releaseAll() {
+	for _, name := range g.names {
+		close(g.release[name])
+	}
+}
+
+func (g *gatedProjects) loopContext(t *testing.T) Context {
+	t.Helper()
+	dir := t.TempDir()
+	projects := make(map[string]string, len(g.names))
+	for _, name := range g.names {
+		projects[name] = "url-" + name
+	}
+	mkProjects(t, dir, g.names...)
+	return Context{Config: config.MetaConfig{Projects: projects}, MetaDir: dir}
+}
+
+type loopOutcome struct {
+	results []Result
+	err     error
+}
+
+func startLoop(command CommandFn, loopCtx Context, opts Options) <-chan loopOutcome {
+	outcome := make(chan loopOutcome, 1)
+	go func() {
+		results, err := Loop(context.Background(), command, loopCtx, opts)
+		outcome <- loopOutcome{results: results, err: err}
+	}()
+	return outcome
+}
+
+func awaitLoop(t *testing.T, outcome <-chan loopOutcome) []Result {
+	t.Helper()
+	select {
+	case o := <-outcome:
+		require.NoError(t, o.err)
+		return o.results
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the loop to return")
+		return nil
+	}
+}
+
+func assertBlocksInOrder(t *testing.T, out string, names ...string) {
+	t.Helper()
+	last := -1
+	for _, name := range names {
+		block := "out:" + name
+		require.Equal(t, 1, strings.Count(out, block), "the block of %s must be printed exactly once", name)
+		at := strings.Index(out, block)
+		assert.Greater(t, at, last, "the block of %s must follow the blocks listed before it", name)
+		last = at
+	}
+}
+
+var orderedProjects = []string{"alpha", "bravo", "charlie", "delta"}
+
+func TestLoopParallelPrintsInConfigOrder(t *testing.T) {
+	tests := []struct {
+		name       string
+		finishedAs []string
+	}{
+		{name: "in config order", finishedAs: []string{"alpha", "bravo", "charlie", "delta"}},
+		{name: "in reverse", finishedAs: []string{"delta", "charlie", "bravo", "alpha"}},
+		{name: "middle first", finishedAs: []string{"charlie", "alpha", "delta", "bravo"}},
+		{name: "last first", finishedAs: []string{"delta", "alpha", "bravo", "charlie"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sequentialOut := captureOutput(t)
+			sequential := newGatedProjects(orderedProjects...)
+			sequential.releaseAll()
+			sequentialResults, err := Loop(context.Background(), sequential.command("charlie"),
+				sequential.loopContext(t), Options{})
+			require.NoError(t, err)
+
+			parallelOut := captureOutput(t)
+			parallel := newGatedProjects(orderedProjects...)
+			outcome := startLoop(parallel.command("charlie"), parallel.loopContext(t),
+				Options{Parallel: true, Concurrency: len(orderedProjects)})
+			parallel.finish(t, tt.finishedAs...)
+			parallelResults := awaitLoop(t, outcome)
+
+			out := parallelOut.String()
+			assertBlocksInOrder(t, out, orderedProjects...)
+			assert.Equal(t, sequentialOut.String(), out,
+				"parallel output, failures and summary must read exactly like a sequential run")
+			assert.NotContains(t, out, "\x1b[K", "the progress line must stay off without a terminal")
+
+			require.Len(t, parallelResults, len(orderedProjects))
+			for i, name := range orderedProjects {
+				assert.Equal(t, name, parallelResults[i].Directory)
+				assert.Equal(t, sequentialResults[i].Success, parallelResults[i].Success)
+				assert.Equal(t, sequentialResults[i].Result, parallelResults[i].Result)
+			}
+			assert.Equal(t, 1, GetExitCode(parallelResults))
+		})
+	}
+}
+
+func TestLoopParallelPrintsABlockOnceEarlierProjectsAreDone(t *testing.T) {
+	out := captureOutput(t)
+	g := newGatedProjects(orderedProjects...)
+	outcome := startLoop(g.command(), g.loopContext(t),
+		Options{Parallel: true, Concurrency: len(orderedProjects)})
+
+	g.finish(t, "alpha")
+	out.waitFor(t, "the block of alpha", func(o string) bool { return strings.Contains(o, "out:alpha") })
+
+	g.finish(t, "bravo")
+	out.waitFor(t, "the block of bravo", func(o string) bool { return strings.Contains(o, "out:bravo") })
+	assert.NotContains(t, out.String(), "out:charlie")
+	assert.NotContains(t, out.String(), "out:delta")
+
+	g.finish(t, "charlie", "delta")
+	awaitLoop(t, outcome)
+
+	assertBlocksInOrder(t, out.String(), orderedProjects...)
+	assert.Contains(t, out.String(), "All 4 projects completed successfully")
+}
+
+func TestLoopParallelSlowFirstProjectHoldsBackTheRest(t *testing.T) {
+	out := captureOutput(t)
+	g := newGatedProjects(orderedProjects...)
+	outcome := startLoop(g.command(), g.loopContext(t),
+		Options{Parallel: true, Concurrency: len(orderedProjects)})
+
+	g.finish(t, "bravo", "charlie", "delta")
+	assert.NotContains(t, out.String(), "out:", "no block may be printed while alpha is still running")
+
+	g.finish(t, "alpha")
+	results := awaitLoop(t, outcome)
+
+	assertBlocksInOrder(t, out.String(), orderedProjects...)
+	require.Len(t, results, len(orderedProjects))
+	assert.Equal(t, 0, GetExitCode(results))
+}
+
+func TestLoopParallelShowsTheProgressLineOnATerminal(t *testing.T) {
+	out := captureOutput(t)
+	isInteractive := output.IsInteractive
+	output.IsInteractive = func(io.Writer) bool { return true }
+	t.Cleanup(func() { output.IsInteractive = isInteractive })
+
+	g := newGatedProjects(orderedProjects...)
+	outcome := startLoop(g.command(), g.loopContext(t),
+		Options{Parallel: true, Concurrency: len(orderedProjects)})
+
+	g.finish(t, "bravo", "charlie", "delta")
+	out.waitFor(t, "the progress line", func(o string) bool {
+		return strings.Contains(o, "Running 3/4, waiting on alpha")
+	})
+	assert.NotContains(t, out.String(), "out:", "no block may be printed while alpha is still running")
+
+	g.finish(t, "alpha")
+	awaitLoop(t, outcome)
+
+	printed := out.String()
+	assertBlocksInOrder(t, printed, orderedProjects...)
+	summary := strings.Index(printed, "All 4 projects completed successfully")
+	require.GreaterOrEqual(t, summary, 0)
+	lastClear := strings.LastIndex(printed, "\r\x1b[K")
+	assert.Less(t, lastClear, summary, "the line must be cleared before the summary")
+	assert.NotContains(t, printed[lastClear:], "waiting on", "the line must not be drawn again once it is cleared")
 }

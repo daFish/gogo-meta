@@ -1110,3 +1110,216 @@ func TestReadMetaConfigMergeOrderPrimaryLocalOverlay(t *testing.T) {
 		{Name: ".gogo.devops", Local: false},
 	}, result.AppliedOverlays)
 }
+
+func TestExecutionConfigInConfigFiles(t *testing.T) {
+	cases := []struct {
+		name    string
+		file    string
+		content string
+		want    *ExecutionConfig
+	}{
+		{"JSON block", ".gogo", `{"projects":{},"execution":{"mode":"sequential","concurrency":2}}`, &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}},
+		{"YAML block", ".gogo.yaml", "projects: {}\nexecution:\n  mode: parallel\n  concurrency: 8\n", &ExecutionConfig{Mode: ExecutionParallel, Concurrency: ptr(8)}},
+		{"JSON mode only", ".gogo", `{"execution":{"mode":"parallel"}}`, &ExecutionConfig{Mode: ExecutionParallel}},
+		{"YAML concurrency only", ".gogo.yml", "execution:\n  concurrency: 1\n", &ExecutionConfig{Concurrency: ptr(1)}},
+		{"YAML null mode", ".gogo.yaml", "execution:\n  mode: null\n  concurrency: 3\n", &ExecutionConfig{Concurrency: ptr(3)}},
+		{"JSON empty block", ".gogo", `{"execution":{}}`, &ExecutionConfig{}},
+		{"YAML empty block", ".gogo.yaml", "execution: {}\n", &ExecutionConfig{}},
+		{"YAML block without a value", ".gogo.yaml", "execution:\n", nil},
+		{"JSON without the block", ".gogo", `{"projects":{}}`, nil},
+		{"YAML without the block", ".gogo.yaml", "projects: {}\n", nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, tc.file), tc.content)
+
+			result, err := ReadMetaConfig(dir, []string{})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, result.Config.Execution)
+		})
+	}
+}
+
+func TestExecutionConfigSettings(t *testing.T) {
+	cases := []struct {
+		name            string
+		execution       *ExecutionConfig
+		wantParallel    bool
+		wantModeSet     bool
+		wantConcurrency int
+		wantLimitSet    bool
+	}{
+		{"nil block", nil, false, false, 0, false},
+		{"empty block", &ExecutionConfig{}, false, false, 0, false},
+		{"parallel", &ExecutionConfig{Mode: ExecutionParallel}, true, true, 0, false},
+		{"sequential", &ExecutionConfig{Mode: ExecutionSequential}, false, true, 0, false},
+		{"concurrency only", &ExecutionConfig{Concurrency: ptr(2)}, false, false, 2, true},
+		{"both", &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(6)}, false, true, 6, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			parallel, modeSet := tc.execution.Parallel()
+			assert.Equal(t, tc.wantParallel, parallel)
+			assert.Equal(t, tc.wantModeSet, modeSet)
+
+			concurrency, limitSet := tc.execution.MaxConcurrency()
+			assert.Equal(t, tc.wantConcurrency, concurrency)
+			assert.Equal(t, tc.wantLimitSet, limitSet)
+		})
+	}
+}
+
+func TestMergeConfigsExecution(t *testing.T) {
+	cases := []struct {
+		name    string
+		base    *ExecutionConfig
+		overlay *ExecutionConfig
+		want    *ExecutionConfig
+	}{
+		{"neither side", nil, nil, nil},
+		{"base only", &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}, nil, &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}},
+		{"overlay only", nil, &ExecutionConfig{Mode: ExecutionSequential}, &ExecutionConfig{Mode: ExecutionSequential}},
+		{"empty overlay keeps the base", &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}, &ExecutionConfig{}, &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}},
+		{"overlay mode keeps the base concurrency", &ExecutionConfig{Concurrency: ptr(2)}, &ExecutionConfig{Mode: ExecutionSequential}, &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}},
+		{"overlay concurrency keeps the base mode", &ExecutionConfig{Mode: ExecutionSequential}, &ExecutionConfig{Concurrency: ptr(8)}, &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(8)}},
+		{"overlay wins per key", &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}, &ExecutionConfig{Mode: ExecutionParallel, Concurrency: ptr(8)}, &ExecutionConfig{Mode: ExecutionParallel, Concurrency: ptr(8)}},
+		{"both empty", &ExecutionConfig{}, &ExecutionConfig{}, &ExecutionConfig{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := MergeConfigs(MetaConfig{Execution: tc.base}, MetaConfig{Execution: tc.overlay})
+			assert.Equal(t, tc.want, merged.Execution)
+		})
+	}
+
+	t.Run("shares no pointers with its inputs", func(t *testing.T) {
+		base := MetaConfig{Execution: &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}}
+		overlay := MetaConfig{Execution: &ExecutionConfig{}}
+
+		merged := MergeConfigs(base, overlay)
+		merged.Execution.Mode = ExecutionParallel
+		*merged.Execution.Concurrency = 9
+
+		assert.Equal(t, &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}, base.Execution)
+		assert.Equal(t, &ExecutionConfig{}, overlay.Execution)
+	})
+}
+
+func TestReadMetaConfigMergesExecutionKeyByKey(t *testing.T) {
+	cases := []struct {
+		name     string
+		primary  string
+		local    string
+		overlay  string
+		overlays []string
+		want     *ExecutionConfig
+	}{
+		{
+			name:    "local mode keeps primary concurrency",
+			primary: `{"projects":{},"execution":{"concurrency":2}}`,
+			local:   `{"execution":{"mode":"sequential"}}`,
+			want:    &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)},
+		},
+		{
+			name:    "local concurrency keeps primary mode",
+			primary: `{"projects":{},"execution":{"mode":"sequential","concurrency":2}}`,
+			local:   `{"execution":{"concurrency":6}}`,
+			want:    &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(6)},
+		},
+		{
+			name:    "local block without a primary block",
+			primary: `{"projects":{}}`,
+			local:   `{"execution":{"mode":"sequential"}}`,
+			want:    &ExecutionConfig{Mode: ExecutionSequential},
+		},
+		{
+			name:     "-f overlay wins over the primary per key",
+			primary:  `{"projects":{},"execution":{"mode":"sequential","concurrency":2}}`,
+			overlay:  `{"execution":{"mode":"parallel"}}`,
+			overlays: []string{".gogo.devops"},
+			want:     &ExecutionConfig{Mode: ExecutionParallel, Concurrency: ptr(2)},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, filepath.Join(dir, ".gogo"), tc.primary)
+			if tc.local != "" {
+				writeFile(t, filepath.Join(dir, ".gogo.local"), tc.local)
+			}
+			if tc.overlay != "" {
+				writeFile(t, filepath.Join(dir, ".gogo.devops"), tc.overlay)
+			}
+
+			result, err := ReadMetaConfig(dir, tc.overlays)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, result.Config.Execution)
+		})
+	}
+}
+
+func TestExecutionConfigSerialization(t *testing.T) {
+	for _, format := range []ConfigFormat{FormatJSON, FormatYAML} {
+		t.Run(string(format)+"/a config without the block is written unchanged", func(t *testing.T) {
+			cfg := MetaConfig{Projects: map[string]string{"a": "urlA"}, Ignore: []string{".git"}}
+
+			written, err := serializeContent(&cfg, format)
+			require.NoError(t, err)
+			assert.NotContains(t, string(written), "execution")
+
+			reread, err := parseContent(written, format)
+			require.NoError(t, err)
+			assert.Nil(t, reread.Execution)
+			rewritten, err := serializeContent(reread, format)
+			require.NoError(t, err)
+			assert.Equal(t, string(written), string(rewritten))
+		})
+
+		t.Run(string(format)+"/the block round-trips", func(t *testing.T) {
+			cfg := MetaConfig{
+				Projects:  map[string]string{"a": "urlA"},
+				Ignore:    []string{".git"},
+				Execution: &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)},
+			}
+
+			written, err := serializeContent(&cfg, format)
+			require.NoError(t, err)
+			reread, err := parseContent(written, format)
+			require.NoError(t, err)
+			assert.Equal(t, cfg.Execution, reread.Execution)
+		})
+
+		t.Run(string(format)+"/unset keys are left out", func(t *testing.T) {
+			cfg := MetaConfig{Projects: map[string]string{}, Ignore: []string{}, Execution: &ExecutionConfig{Mode: ExecutionSequential}}
+
+			written, err := serializeContent(&cfg, format)
+			require.NoError(t, err)
+			assert.Contains(t, string(written), "sequential")
+			assert.NotContains(t, string(written), "concurrency")
+		})
+	}
+}
+
+func TestProjectChangesKeepExecution(t *testing.T) {
+	cfg := MetaConfig{
+		Projects:  map[string]string{"a": "urlA"},
+		Execution: &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)},
+	}
+	want := &ExecutionConfig{Mode: ExecutionSequential, Concurrency: ptr(2)}
+
+	added := AddProject(cfg, "b", "urlB")
+	assert.Equal(t, want, added.Execution)
+	removed := RemoveProject(cfg, "a")
+	assert.Equal(t, want, removed.Execution)
+
+	*added.Execution.Concurrency = 9
+	*removed.Execution.Concurrency = 9
+	assert.Equal(t, want, cfg.Execution, "the original config is untouched")
+
+	assert.Nil(t, AddProject(MetaConfig{Projects: map[string]string{}}, "b", "urlB").Execution)
+}

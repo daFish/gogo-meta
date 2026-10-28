@@ -12,14 +12,10 @@ func newGitStatusCmd() *cobra.Command {
 		RunE:  runGitStatus,
 	}
 	addFilterFlags(cmd)
-	cmd.Flags().Bool("parallel", false, "Execute in parallel")
+	addParallelFlags(cmd)
 	return cmd
 }
 
 func runGitStatus(cmd *cobra.Command, _ []string) error {
-	opts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", "status", "--short", "--branch"), opts)
+	return runLoopCommand(cmd, loop.ArgsCommand(newShellExecutor(), "git", "status", "--short", "--branch"))
 }

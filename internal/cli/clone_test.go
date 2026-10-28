@@ -2,6 +2,9 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -164,4 +167,86 @@ func TestCloneMissingHonorsParallelAndConcurrency(t *testing.T) {
 		assert.LessOrEqual(t, ex.maxInFlight, 2, "--concurrency must bound the clone pool")
 		assert.Greater(t, ex.maxInFlight, 1, "--parallel must actually clone concurrently")
 	})
+}
+
+// nestingExecutor clones like git does: it refuses a destination that exists
+// and is not empty, and otherwise fills it. It also records every clone that
+// starts while a clone into an ancestor or descendant directory is running,
+// which catches the race even when git's refusal would not.
+type nestingExecutor struct {
+	delay time.Duration
+
+	mu          sync.Mutex
+	inFlight    map[string]bool
+	overlaps    []string
+	maxInFlight int
+}
+
+func (n *nestingExecutor) Execute(_ context.Context, _ string, _ executor.Options) (*executor.Result, error) {
+	return &executor.Result{ExitCode: 0}, nil
+}
+
+func (n *nestingExecutor) ExecuteArgs(_ context.Context, _ string, args []string, opts executor.Options) (*executor.Result, error) {
+	dest := filepath.Join(opts.Cwd, args[len(args)-1])
+
+	n.mu.Lock()
+	for running := range n.inFlight {
+		if isWithin(dest, running) || isWithin(running, dest) {
+			n.overlaps = append(n.overlaps, dest+" with "+running)
+		}
+	}
+	n.inFlight[dest] = true
+	n.maxInFlight = max(n.maxInFlight, len(n.inFlight))
+	n.mu.Unlock()
+
+	defer func() {
+		n.mu.Lock()
+		delete(n.inFlight, dest)
+		n.mu.Unlock()
+	}()
+
+	if entries, err := os.ReadDir(dest); err == nil && len(entries) > 0 {
+		return &executor.Result{ExitCode: 128, Stderr: "fatal: destination path already exists and is not an empty directory."}, nil
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(dest, "HEAD"), nil, 0o644); err != nil {
+		return nil, err
+	}
+	time.Sleep(n.delay)
+	return &executor.Result{ExitCode: 0}, nil
+}
+
+func isWithin(path, dir string) bool {
+	return strings.HasPrefix(path, dir+string(filepath.Separator))
+}
+
+func TestCloneMissingClonesAParentBeforeTheProjectsNestedInIt(t *testing.T) {
+	// The nested projects are listed before their parents, so neither the input
+	// order nor a pool that starts them all at once may decide the order.
+	targets := []cloneTarget{
+		{Path: "a/b/c", URL: "git@x:o/c.git"},
+		{Path: "a/b", URL: "git@x:o/b.git"},
+		{Path: "a", URL: "git@x:o/a.git"},
+		{Path: "ab", URL: "git@x:o/ab.git"},
+		{Path: "other", URL: "git@x:o/other.git"},
+	}
+
+	for _, parallel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("parallel=%v", parallel), func(t *testing.T) {
+			ex := &nestingExecutor{delay: 20 * time.Millisecond, inFlight: map[string]bool{}}
+			outcomes := cloneMissing(context.Background(), ex, t.TempDir(), targets, parallel, 4, nil)
+
+			require.Len(t, outcomes, len(targets))
+			for i, target := range targets {
+				assert.Equal(t, target.Path, outcomes[i].Path, "outcomes keep the input order")
+				assert.Empty(t, outcomes[i].Err, "%s must be cloned", target.Path)
+			}
+			assert.Empty(t, ex.overlaps, "a project must not be cloned while a project nested in it is")
+			if parallel {
+				assert.Greater(t, ex.maxInFlight, 1, "unrelated projects are still cloned at the same time")
+			}
+		})
+	}
 }

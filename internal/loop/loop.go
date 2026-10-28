@@ -154,6 +154,18 @@ func runSequential(ctx context.Context, command CommandFn, directories []string,
 // goroutine. It prints nothing. A non-nil error from fn cancels the context the
 // remaining items see.
 func RunEach(ctx context.Context, items []string, parallel bool, concurrency int, fn func(ctx context.Context, item string) (*executor.Result, error)) []Result {
+	return runEach(ctx, items, parallel, concurrency, fn, nil)
+}
+
+type finishedItem struct {
+	idx    int
+	result Result
+}
+
+// runEach is RunEach that also sends every item to finished as soon as it is
+// done, in completion order. finished needs room for every item, since a
+// worker never waits for it to be read.
+func runEach(ctx context.Context, items []string, parallel bool, concurrency int, fn func(ctx context.Context, item string) (*executor.Result, error), finished chan<- finishedItem) []Result {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -183,9 +195,16 @@ func RunEach(ctx context.Context, items []string, parallel bool, concurrency int
 		}
 	}
 
+	runAndReport := func(idx int) {
+		run(idx)
+		if finished != nil {
+			finished <- finishedItem{idx: idx, result: results[idx]}
+		}
+	}
+
 	if !parallel {
 		for idx := range items {
-			run(idx)
+			runAndReport(idx)
 		}
 		return results
 	}
@@ -210,7 +229,7 @@ func RunEach(ctx context.Context, items []string, parallel bool, concurrency int
 		go func() {
 			defer wg.Done()
 			for idx := range work {
-				run(idx)
+				runAndReport(idx)
 			}
 		}()
 	}
@@ -219,17 +238,54 @@ func RunEach(ctx context.Context, items []string, parallel bool, concurrency int
 	return results
 }
 
+// runParallel prints each project's block as soon as the project and every
+// project listed before it are done, so the output reads like a sequential
+// run while the pool keeps working. A progress line names the project the
+// output is waiting on.
 func runParallel(ctx context.Context, command CommandFn, directories []string, loopCtx Context, opts Options) ([]Result, error) {
-	results := RunEach(ctx, directories, true, opts.Concurrency, func(ctx context.Context, projectPath string) (*executor.Result, error) {
-		return command(ctx, filepath.Join(loopCtx.MetaDir, projectPath), projectPath)
-	})
+	progress := output.StartProgress("Running", len(directories))
+	progress.SetDetail(waitingOn(directories[0]))
 
-	for _, r := range results {
-		output.Header(r.Directory)
-		output.CommandOutput(r.Result.Stdout, r.Result.Stderr)
+	finished := make(chan finishedItem, len(directories))
+	all := make(chan []Result, 1)
+	go func() {
+		all <- runEach(ctx, directories, true, opts.Concurrency, func(ctx context.Context, projectPath string) (*executor.Result, error) {
+			return command(ctx, filepath.Join(loopCtx.MetaDir, projectPath), projectPath)
+		}, finished)
+	}()
+
+	held := make([]*Result, len(directories))
+	next := 0
+	for range directories {
+		item := <-finished
+		held[item.idx] = &item.result
+		progress.Advance()
+
+		ready := next
+		for ready < len(directories) && held[ready] != nil {
+			ready++
+		}
+		if ready < len(directories) {
+			progress.SetDetail(waitingOn(directories[ready]))
+		} else {
+			progress.SetDetail("")
+		}
+
+		for ; next < ready; next++ {
+			r := held[next]
+			progress.Print(func() {
+				output.Header(r.Directory)
+				output.CommandOutput(r.Result.Stdout, r.Result.Stderr)
+			})
+		}
 	}
+	progress.Stop()
 
-	return results, nil
+	return <-all, nil
+}
+
+func waitingOn(projectPath string) string {
+	return "waiting on " + projectPath
 }
 
 // HasFailures returns true if any result has a non-zero exit code.

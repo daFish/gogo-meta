@@ -17,9 +17,5 @@ func newGitPullCmd() *cobra.Command {
 }
 
 func runGitPull(cmd *cobra.Command, _ []string) error {
-	opts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", "pull"), opts)
+	return runLoopCommand(cmd, loop.ArgsCommand(newShellExecutor(), "git", "pull"))
 }

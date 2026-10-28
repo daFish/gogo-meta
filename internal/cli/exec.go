@@ -23,12 +23,7 @@ func newExecCmd() *cobra.Command {
 func runExec(cmd *cobra.Command, args []string) error {
 	command := args[0]
 
-	opts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-
-	loopCtx, err := loadLoopContext()
+	loopCtx, opts, err := prepareLoop(cmd)
 	if err != nil {
 		return err
 	}
