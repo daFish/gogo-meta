@@ -298,6 +298,100 @@ func TestPlanMigrationBuckets(t *testing.T) {
 	})
 }
 
+func TestPlanMigrationMatchesRemoteSpellings(t *testing.T) {
+	dir := t.TempDir()
+	api := mkGitRepo(t, dir, "libs/api")
+	web := mkGitRepo(t, dir, "libs/web")
+	moved := mkGitRepo(t, dir, "old/shared")
+
+	cfg := config.MetaConfig{Projects: map[string]string{
+		"libs/api":    "https://github.com/org/api.git",
+		"libs/web":    "https://github.com/org/web",
+		"libs/shared": "/remotes/shared.git/",
+	}}
+	ex := &fakeExecutor{remotes: map[string]string{
+		api:   "git@github.com:org/api.git",
+		web:   "https://github.com/org/web.git",
+		moved: "/remotes/shared.git",
+	}}
+
+	plan, err := planMigration(context.Background(), ex, dir, cfg, []string{"libs/api", "libs/shared", "libs/web"})
+	require.NoError(t, err)
+
+	assert.Empty(t, plan.conflicts, "another spelling of the configured remote is not a conflict")
+	assert.Equal(t, []string{"libs/api", "libs/web"}, plan.present)
+	assert.Empty(t, plan.missing, "a checkout under another spelling must be moved, not cloned beside it")
+	assert.Equal(t, []migrateMove{{from: "old/shared", to: "libs/shared"}}, plan.moves)
+}
+
+func TestPlanMigrationMovesACheckoutAtMostOnce(t *testing.T) {
+	t.Run("a checkout serving its own project stays put", func(t *testing.T) {
+		dir := t.TempDir()
+		api := mkGitRepo(t, dir, "libs/api")
+
+		cfg := config.MetaConfig{Projects: map[string]string{
+			"libs/api":    "https://github.com/org/api.git",
+			"mirrors/api": "git@github.com:org/api.git",
+		}}
+		ex := &fakeExecutor{remotes: map[string]string{api: "git@github.com:org/api.git"}}
+
+		plan, err := planMigration(context.Background(), ex, dir, cfg, []string{"libs/api", "mirrors/api"})
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"libs/api"}, plan.present)
+		assert.Empty(t, plan.moves)
+		assert.Equal(t, []string{"mirrors/api"}, plan.missing)
+	})
+
+	t.Run("one checkout claimed by two projects moves to the first", func(t *testing.T) {
+		dir := t.TempDir()
+		old := mkGitRepo(t, dir, "old/api")
+
+		cfg := config.MetaConfig{Projects: map[string]string{
+			"libs/api":    "https://github.com/org/api.git",
+			"mirrors/api": "git@github.com:org/api.git",
+		}}
+		ex := &fakeExecutor{remotes: map[string]string{old: "https://github.com/org/api"}}
+
+		plan, err := planMigration(context.Background(), ex, dir, cfg, []string{"libs/api", "mirrors/api"})
+		require.NoError(t, err)
+
+		assert.Equal(t, []migrateMove{{from: "old/api", to: "libs/api"}}, plan.moves)
+		assert.Equal(t, []string{"mirrors/api"}, plan.missing)
+	})
+
+	t.Run("a checkout held by a conflicting project is still moved", func(t *testing.T) {
+		dir := t.TempDir()
+		swapped := mkGitRepo(t, dir, "libs/api")
+
+		cfg := config.MetaConfig{Projects: map[string]string{
+			"libs/api": "git@github.com:org/api.git",
+			"libs/web": "git@github.com:org/web.git",
+		}}
+		ex := &fakeExecutor{remotes: map[string]string{swapped: "git@github.com:org/web.git"}}
+
+		plan, err := planMigration(context.Background(), ex, dir, cfg, []string{"libs/api", "libs/web"})
+		require.NoError(t, err)
+
+		require.Len(t, plan.conflicts, 1)
+		assert.Equal(t, "libs/api", plan.conflicts[0].path)
+		assert.Equal(t, []migrateMove{{from: "libs/api", to: "libs/web"}}, plan.moves)
+	})
+}
+
+func TestMigrateAcceptsAnotherSpellingOfTheRemote(t *testing.T) {
+	dir := t.TempDir()
+	writeGogo(t, dir, `{"projects":{"libs/api":"https://github.com/org/api.git"}}`)
+	abs := mkGitRepo(t, dir, "libs/api")
+	buf := captureOutput(t)
+
+	code, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{abs: "git@github.com:org/api.git"}}, dir, false)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.Contains(t, buf.String(), "already matches")
+}
+
 func TestApplyMovesReportsCompletedMoves(t *testing.T) {
 	dir := t.TempDir()
 	mkGitRepo(t, dir, "old/api")
