@@ -15,16 +15,11 @@ func newGitBranchCmd() *cobra.Command {
 	cmd.Flags().BoolP("delete", "d", false, "Delete the specified branch")
 	cmd.Flags().BoolP("all", "a", false, "List all branches (local and remote)")
 	addFilterFlags(cmd)
-	cmd.Flags().Bool("parallel", false, "Execute in parallel")
+	addParallelFlags(cmd)
 	return cmd
 }
 
 func runGitBranch(cmd *cobra.Command, args []string) error {
-	opts, err := resolveLoopOptions(cmd)
-	if err != nil {
-		return err
-	}
-
 	deleteFlag, _ := cmd.Flags().GetBool("delete")
 	allFlag, _ := cmd.Flags().GetBool("all")
 
@@ -40,5 +35,5 @@ func runGitBranch(cmd *cobra.Command, args []string) error {
 		gitArgs = []string{"branch", args[0]}
 	}
 
-	return runLoopCommand(cmd.Context(), loop.ArgsCommand(newShellExecutor(), "git", gitArgs...), opts)
+	return runLoopCommand(cmd, loop.ArgsCommand(newShellExecutor(), "git", gitArgs...))
 }

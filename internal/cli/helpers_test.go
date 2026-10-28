@@ -36,8 +36,9 @@ func TestRunLoopCommandRunsAcrossProjects(t *testing.T) {
 		return &executor.Result{ExitCode: 0}, nil
 	})
 
-	err := runLoopCommand(context.Background(), command, loop.Options{})
-	require.NoError(t, err)
+	cmd := filterCmd(t, nil)
+	cmd.SetContext(context.Background())
+	require.NoError(t, runLoopCommand(cmd, command))
 	assert.True(t, ran["a"])
 	assert.True(t, ran["b"])
 }

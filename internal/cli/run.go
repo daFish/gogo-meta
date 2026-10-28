@@ -26,7 +26,7 @@ func newRunCmd() *cobra.Command {
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
-	_, err := requireMetaDir()
+	metaDir, err := requireMetaDir()
 	if err != nil {
 		return err
 	}
@@ -85,13 +85,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 		mergedFilter.ExcludePattern, _ = filter.ParseFilterPattern(commandDef.ExcludePattern)
 	}
 
-	parallel := getBoolFlag(cmd, "parallel")
-	if !parallel && commandDef.Parallel != nil && *commandDef.Parallel {
-		parallel = true
-	}
-	concurrency := getIntFlag(cmd, "concurrency")
-	if concurrency == 0 && commandDef.Concurrency != nil {
-		concurrency = *commandDef.Concurrency
+	parallel, concurrency, err := resolveExecution(cmd, configResult.Config, &commandDef)
+	if err != nil {
+		return err
 	}
 
 	loopOpts := loop.Options{
@@ -100,7 +96,6 @@ func runRun(cmd *cobra.Command, args []string) error {
 		Concurrency: concurrency,
 	}
 
-	metaDir, _ := requireMetaDir()
 	output.Info(fmt.Sprintf("Running %q: %s", name, output.Bold(commandDef.Cmd)))
 
 	results, err := loop.Loop(cmd.Context(), loop.ShellCommand(newShellExecutor(), commandDef.Cmd), loop.Context{

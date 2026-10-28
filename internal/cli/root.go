@@ -33,8 +33,9 @@ func NewRootCommand(version string) *cobra.Command {
 	pf.String("exclude-only", "", "Exclude specified directories (comma-separated)")
 	pf.String("include-pattern", "", "Include directories matching regex pattern")
 	pf.String("exclude-pattern", "", "Exclude directories matching regex pattern")
-	pf.Bool("parallel", false, "Execute commands in parallel")
-	pf.Int("concurrency", 0, "Max parallel processes (default: 4)")
+	pf.Bool("parallel", false, parallelFlagUsage)
+	pf.Bool("sequential", false, sequentialFlagUsage)
+	pf.Int("concurrency", 0, concurrencyFlagUsage)
 
 	rootCmd.AddCommand(
 		newInitCmd(),

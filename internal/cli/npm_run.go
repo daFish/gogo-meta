@@ -29,7 +29,7 @@ func newNpmRunCmd() *cobra.Command {
 func runNpmRun(cmd *cobra.Command, args []string) error {
 	script := args[0]
 
-	opts, err := resolveLoopOptions(cmd)
+	loopCtx, opts, err := prepareLoop(cmd)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func runNpmRun(cmd *cobra.Command, args []string) error {
 		command = loop.ArgsCommand(exec, "npm", "run", script)
 	}
 
-	return runLoopCommand(cmd.Context(), command, opts)
+	return runLoop(cmd.Context(), command, loopCtx, opts)
 }
 
 func hasNpmScript(dir, scriptName string) bool {
