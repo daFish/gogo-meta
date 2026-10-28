@@ -10,7 +10,7 @@ gogo-meta allows developers to manage multiple git repositories as a unified sys
 
 - **Language**: Go 1.24+
 - **CLI Framework**: cobra
-- **YAML**: gopkg.in/yaml.v3
+- **YAML**: go.yaml.in/yaml/v3
 - **Terminal Styling**: fatih/color
 - **Testing**: testing (stdlib) + testify
 - **Linting**: golangci-lint v2
