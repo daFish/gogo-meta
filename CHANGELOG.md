@@ -71,6 +71,29 @@ from the `projects` map in `.gogo`. `gogo validate` also no longer validates
 
 * add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
 
+## [4.0.0](https://github.com/daFish/gogo-meta/compare/v3.2.0...v4.0.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** config files that loaded before may now be rejected: unknown keys at any level (including annotations such as `_comment`, JSON keys in another case such as `Projects`, and YAML anchor holders such as `x-defaults:`), repeated keys in JSON, YAML values of the wrong type (unquoted numbers or booleans where a string is expected, `yes`/`no` for booleans, fractional `concurrency`), and YAML documents whose aliases expand beyond yaml.v3's limits.
+
+### Features
+
+* **cli:** show a progress spinner while gogo update works ([8a2a4e1](https://github.com/daFish/gogo-meta/commit/8a2a4e1f0f1e8d743d1cb06af6b092d2ae767075))
+* **config:** validate config files against a JSON Schema ([72bc126](https://github.com/daFish/gogo-meta/commit/72bc126cb68e1a2a1bed4c7c1ba0f3ca15805052))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/mattn/go-isatty to v0.0.24 ([20d23f6](https://github.com/daFish/gogo-meta/commit/20d23f6e32ea9b39da3fd895d0756e7e39019b0c))
+
+
+### Build System
+
+* **deps:** require Go 1.26.10 for the net/url fix (GO-2026-6218) ([0f5230f](https://github.com/daFish/gogo-meta/commit/0f5230f1a9bc5e9128964ca4facfaf4aaae5c8f7))
+* **deps:** switch to the maintained YAML fork go.yaml.in/yaml/v3 ([87e9a60](https://github.com/daFish/gogo-meta/commit/87e9a6007ad877f1300f86296502d223acda605d))
+
 ## [3.2.0](https://github.com/daFish/gogo-meta/compare/v3.1.1...v3.2.0) (2026-09-11)
 
 
