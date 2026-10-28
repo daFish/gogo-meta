@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/daFish/gogo-meta/internal/executor"
+	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/filter"
 	"github.com/daFish/gogo-meta/internal/output"
 	"github.com/spf13/cobra"
@@ -34,6 +34,11 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	parallel, concurrency, err := resolveExecution(cmd, configResult.Config, nil)
+	if err != nil {
+		return err
+	}
+
 	// Keep the gogo-meta-managed block in .git/info/exclude in sync with the full
 	// .gogo.local project set. Filter-independent: dropping a project from
 	// .gogo.local must remove its stale entry too.
@@ -46,12 +51,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Get filtered project entries.
-	projectPaths := make([]string, 0, len(configResult.Config.Projects))
-	for k := range configResult.Config.Projects {
-		projectPaths = append(projectPaths, k)
-	}
-	filteredPaths := filter.Apply(projectPaths, filterOpts)
+	filteredPaths := filter.Apply(config.GetProjectPaths(configResult.Config), filterOpts)
 
 	if len(filteredPaths) == 0 {
 		output.Warning("No projects match the specified filters")
@@ -92,8 +92,7 @@ func runGitUpdate(cmd *cobra.Command, _ []string) error {
 		targets[i] = cloneTarget{Path: m.path, URL: m.url}
 	}
 
-	outcomes := cloneMissing(cmd.Context(), executor.NewShellExecutor(), metaDir, targets,
-		getBoolFlag(cmd, "parallel"), getIntFlag(cmd, "concurrency"), nil)
+	outcomes := cloneMissing(cmd.Context(), newShellExecutor(), metaDir, targets, parallel, concurrency, nil)
 
 	successCount := 0
 	failCount := 0

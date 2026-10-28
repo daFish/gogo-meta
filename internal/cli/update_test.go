@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/daFish/gogo-meta/internal/config"
 	"github.com/daFish/gogo-meta/internal/executor"
@@ -472,4 +473,54 @@ func TestUpdateOutsideMetaRepo(t *testing.T) {
 	_, err := runUpdate(context.Background(), &updateExecutor{}, t.TempDir(), updateOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gogo init")
+}
+
+func TestUpdateResolvesExecutionAgainstTheConfig(t *testing.T) {
+	tests := []struct {
+		name            string
+		configExecution string
+		local           string
+		flags           executionFlags
+		wantMaxInFlight int
+	}{
+		{name: "parallel by default, bounded by execution.concurrency", configExecution: `{"concurrency":2}`, wantMaxInFlight: 2},
+		{name: "execution.mode sequential in .gogo.local", configExecution: `{"concurrency":2}`, local: `{"execution":{"mode":"sequential"}}`, wantMaxInFlight: 1},
+		{name: "--parallel beats .gogo.local", configExecution: `{"concurrency":2}`, local: `{"execution":{"mode":"sequential"}}`, flags: executionFlags{parallel: boolPtr(true)}, wantMaxInFlight: 2},
+		{name: "--sequential beats execution.mode parallel", configExecution: `{"mode":"parallel"}`, flags: executionFlags{parallel: boolPtr(false)}, wantMaxInFlight: 1},
+		{name: "--concurrency beats execution.concurrency", configExecution: `{"concurrency":4}`, flags: executionFlags{concurrency: intPtr(2)}, wantMaxInFlight: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo"), []byte(`{"projects":{`+
+				`"a":"git@x:o/a.git","b":"git@x:o/b.git","c":"git@x:o/c.git","d":"git@x:o/d.git","e":"git@x:o/e.git","f":"git@x:o/f.git"},`+
+				`"execution":`+tt.configExecution+`}`), 0o644))
+			if tt.local != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".gogo.local"), []byte(tt.local), 0o644))
+			}
+			config.SetOverlayFiles(nil)
+			_ = captureOutput(t)
+
+			ex := &cloneExecutor{delay: 20 * time.Millisecond}
+			code, err := runUpdate(context.Background(), ex, dir, updateOptions{Execution: tt.flags})
+			require.NoError(t, err)
+			assert.Equal(t, 0, code)
+			assert.Len(t, ex.cloned, 6)
+			assertCloneConcurrency(t, ex.maxInFlight, tt.wantMaxInFlight)
+		})
+	}
+}
+
+// assertCloneConcurrency checks the most clones that ran at once against the
+// pool size the execution settings resolve to: exactly one when sequential,
+// and more than one but no more than the concurrency when parallel.
+func assertCloneConcurrency(t *testing.T, maxInFlight, wantMaxInFlight int) {
+	t.Helper()
+	if wantMaxInFlight == 1 {
+		assert.Equal(t, 1, maxInFlight, "clones run one at a time")
+		return
+	}
+	assert.Greater(t, maxInFlight, 1, "clones run at the same time")
+	assert.LessOrEqual(t, maxInFlight, wantMaxInFlight, "the concurrency bounds the clone pool")
 }

@@ -16,7 +16,7 @@ Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a1
 - Clone entire project ecosystems with one command
 - Converge the working copy on the configuration with one command (`gogo update`)
 - Execute arbitrary commands across all repositories
-- Parallel or sequential execution modes
+- Parallel execution by default, with a sequential opt-out per config, command or call
 - Flexible filtering (include/exclude by name or pattern)
 - NPM operations across all projects
 - Symlink projects for local development
@@ -25,8 +25,8 @@ Reimplementation of [gogo-meta](https://github.com/daFish/gogo-meta/tree/44344a1
 
 ## Differences from the TypeScript version
 
-The Go rewrite is behavior-compatible with the TypeScript original for all valid inputs.
-A few intentional divergences harden security and robustness:
+The Go rewrite is behavior-compatible with the TypeScript original for all valid inputs,
+apart from a few intentional divergences. Most of them harden security and robustness:
 
 - **Built-in commands run without a shell.** Internal `git` / `npm` / `ssh-keyscan`
   invocations execute as argument vectors, not through `/bin/sh -c`. The TypeScript version
@@ -41,6 +41,11 @@ A few intentional divergences harden security and robustness:
 - **`gogo init` has no `-f` shorthand.** Use `--force`. (The global `-f` / `--file` overlay
   flag is unchanged.) The TypeScript CLI accepted `-f` for both, which the Go CLI framework
   cannot express without a flag collision.
+- **Commands run in parallel by default.** Commands that run in every project (`exec`,
+  `run`, `git status`, `git pull`, `npm install`, …) use 4 workers unless told otherwise;
+  the TypeScript version ran them one project at a time unless `--parallel` was passed.
+  `--sequential`, or `mode: sequential` in the config's [`execution`](#execution) block,
+  restores that. `gogo git commit` stays sequential.
 
 ## Installation
 
@@ -101,16 +106,16 @@ gogo git clone git@github.com:org/meta-repo.git
 # move renamed ones, clone missing ones, fast-forward the rest
 gogo update
 
-# Run commands across all projects
+# Run commands across all projects (in parallel, 4 at a time)
 gogo exec "npm install"
-gogo exec "git status" --parallel
+gogo exec "git status" --sequential
 ```
 
 ## Configuration
 
 ### .gogo
 
-The config file defines child repositories, ignore patterns, and predefined commands. Both JSON and YAML formats are supported.
+The config file defines child repositories, ignore patterns, groups, predefined commands and how commands are executed. Both JSON and YAML formats are supported.
 
 gogo looks for config files in the following order of precedence: `.gogo` (JSON) > `.gogo.yaml` > `.gogo.yml`. The first file found is used.
 
@@ -134,19 +139,22 @@ gogo looks for config files in the following order of precedence: `.gogo` (JSON)
     "build": "npm run build",
     "test": {
       "cmd": "npm test",
-      "parallel": true,
+      "concurrency": 2,
       "description": "Run tests in all projects"
     },
     "deploy": {
       "cmd": "npm run deploy",
-      "parallel": true,
-      "concurrency": 2,
+      "parallel": false,
       "includeOnly": ["api", "web"]
     },
     "migrate": {
       "cmd": "npm run migrate",
       "groups": ["backend"]
     }
+  },
+  "execution": {
+    "mode": "parallel",
+    "concurrency": 8
   }
 }
 ```
@@ -179,12 +187,11 @@ commands:
   build: npm run build
   test:
     cmd: npm test
-    parallel: true
+    concurrency: 2
     description: Run tests in all projects
   deploy:
     cmd: npm run deploy
-    parallel: true
-    concurrency: 2
+    parallel: false
     includeOnly:
       - api
       - web
@@ -192,6 +199,11 @@ commands:
     cmd: npm run migrate
     groups:
       - backend
+
+# How commands run in all projects (see Execution below)
+execution:
+  mode: parallel
+  concurrency: 8
 ```
 
 ### Schema
@@ -208,9 +220,10 @@ location in it and what is wrong:
 
 ```text
 $ gogo git status
-✗ .gogo: unknown key "group" (allowed: $schema, projects, ignore, groups, commands)
+✗ .gogo: unknown key "group" (allowed: $schema, projects, ignore, groups, commands, execution)
 ✗ .gogo: commands.build.concurrency: must be >= 1 (got 0)
 ✗ .gogo: commands.test: unknown key "paralel" (allowed: cmd, description, parallel, concurrency, groups, includeOnly, excludeOnly, includePattern, excludePattern)
+✗ .gogo.local: execution: unknown key "mdoe" (allowed: mode, concurrency)
 ```
 
 `gogo validate` lists the same problems under each file it checks.
@@ -255,7 +268,7 @@ gogo exec --group backend,frontend "npm test"
 
 # Works for every command that takes filters
 gogo git status --group backend
-gogo npm install --group frontend --parallel
+gogo npm install --group frontend --sequential
 ```
 
 Rules:
@@ -273,6 +286,63 @@ Rules:
   `gogo validate` checks every group up front and resolves the members against
   every config file it finds — in the current directory and next to the primary
   config — whether or not they were loaded.
+
+### Execution
+
+Every command that runs in all projects runs them in parallel by default, at
+most 4 at a time. The top-level `execution` block changes that default for the
+whole workspace:
+
+```text
+execution:
+  mode: sequential   # parallel (default) | sequential
+  concurrency: 2     # default: 4; only used in parallel mode
+```
+
+| Key           | Values                                 | Default    |
+| ------------- | -------------------------------------- | ---------- |
+| `mode`        | `parallel` or `sequential`             | `parallel` |
+| `concurrency` | Maximum number of projects run at once | `4`        |
+
+An empty block (`execution: {}`, or `execution:` with no value in YAML) sets
+nothing. The mode and the concurrency are each taken from the first of these
+sources that sets them:
+
+| Source (most specific first)           | Mode                          | Concurrency         |
+| -------------------------------------- | ----------------------------- | ------------------- |
+| 1. Command line                        | `--parallel` / `--sequential` | `--concurrency <n>` |
+| 2. `commands.<name>` (`gogo run` only) | `parallel: true\|false`       | `concurrency: <n>`  |
+| 3. `execution` from the merged config  | `mode: parallel\|sequential`  | `concurrency: <n>`  |
+| 4. Built-in default                    | parallel                      | 4                   |
+
+So a predefined command with `parallel: false` (`deploy` above) stays
+sequential while everything else runs in parallel, and `--sequential` beats
+every config file. `--parallel` and `--sequential` cannot be used together, and
+`--concurrency` must be at least 1.
+
+The block can sit in the shared `.gogo`, in a `-f` overlay or in your
+[`.gogo.local`](#personal-overlay-gogolocal), and is merged key by key: with
+`concurrency: 2` in `.gogo` and only `mode: sequential` in `.gogo.local`, gogo
+runs sequentially, and `--parallel` then runs with 2 workers.
+
+**Output.** A parallel run prints each project's output as a whole, in the
+order of the config, as soon as that project and every project listed before it
+have finished. The output reads exactly like a sequential run, while the
+projects still run concurrently. While a parallel run is in progress, a
+terminal shows a progress line that names the project the output is waiting
+on, so a slow project near the top does not look like a hang:
+`⠋ Running 5/12, waiting on backend (3s)`. Piped output and CI logs get no
+progress line. `gogo update` and `gogo git update` print their own report, as
+before.
+
+**Rate-limited git hosts.** Several concurrent ssh connections can trip
+`MaxStartups` or a rate limit on some git hosts, which shows up as failed
+`git pull` or `git fetch` calls. Lower `execution.concurrency`, or set
+`mode: sequential`, in `.gogo` for everyone or in `.gogo.local` for just your
+machine, instead of passing `--concurrency` on every call.
+
+`gogo git commit` always runs one project at a time, whatever the config and
+the flags say, because commit hooks and signing expect one commit at a time.
 
 ### Multiple Config Files
 
@@ -292,6 +362,8 @@ Overlay files follow the same format as the primary config (JSON or YAML). When 
 - **Groups**: overlay entries are added; on name conflict the overlay wins
   (the overlay's project list replaces the base one)
 - **Commands**: overlay entries are added; on key conflict the overlay wins
+- **Execution**: merged key by key; a key the overlay sets wins, a key it
+  leaves out keeps the base value
 
 A group in an overlay may list projects defined in the base config, and vice
 versa. At runtime group members are checked against the merged configuration;
@@ -306,7 +378,7 @@ Write commands (`project create`, `project import`) only modify the primary conf
 
 A `.gogo.local` file sitting next to the primary config is **auto-merged on every normal command** (no `-f` needed) — think of it like `docker-compose.override.yml`. Its filename follows the primary's format: `.gogo.local` beside a JSON `.gogo`, `.gogo.local.yaml` beside a `.gogo.yaml`. Merge order is **primary → `.gogo.local` → `-f` overlays**.
 
-Use it for personal additions: extra repos only you work with, or a shared template you'd rather not pass with `-f` every time. It is **not** merged by write commands (`project create`, `project import`, `git clone`), so your personal projects never leak into the shared `.gogo`.
+Use it for personal additions: extra repos only you work with, a shared template you'd rather not pass with `-f` every time, or your own [`execution`](#execution) setting (for example `mode: sequential` when your git host limits concurrent connections) without touching the shared `.gogo`. It is **not** merged by write commands (`project create`, `project import`, `git clone`), so your personal projects never leak into the shared `.gogo`.
 
 #### Two-layer ignore model
 
@@ -332,16 +404,20 @@ Because gogo finds `.gogo.local` on its own, it gets the same ownership check as
 
 These options are available for most commands:
 
-| Option                      | Description                                                  |
-| --------------------------- | ------------------------------------------------------------ |
-| `-f, --file <path>`         | Additional config file to merge (repeatable)                 |
-| `--group <names>`           | Only target projects of the named group(s) (comma-separated) |
-| `--include-only <dirs>`     | Only target specified directories (comma-separated)          |
-| `--exclude-only <dirs>`     | Exclude specified directories (comma-separated)              |
-| `--include-pattern <regex>` | Include directories matching regex pattern                   |
-| `--exclude-pattern <regex>` | Exclude directories matching regex pattern                   |
-| `--parallel`                | Execute commands concurrently                                |
-| `--concurrency <n>`         | Maximum parallel processes (default: 4)                      |
+| Option                      | Description                                                                   |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| `-f, --file <path>`         | Additional config file to merge (repeatable)                                  |
+| `--group <names>`           | Only target projects of the named group(s) (comma-separated)                  |
+| `--include-only <dirs>`     | Only target specified directories (comma-separated)                           |
+| `--exclude-only <dirs>`     | Exclude specified directories (comma-separated)                               |
+| `--include-pattern <regex>` | Include directories matching regex pattern                                    |
+| `--exclude-pattern <regex>` | Exclude directories matching regex pattern                                    |
+| `--parallel`                | Run in parallel (default unless the config sets `execution.mode: sequential`) |
+| `--sequential`              | Run one project at a time                                                     |
+| `--concurrency <n>`         | Maximum parallel processes (default: 4, or `execution.concurrency`)           |
+
+Commands that run in all projects run in parallel unless the config or
+`--sequential` says otherwise; see [Execution](#execution).
 
 ---
 
@@ -367,14 +443,14 @@ gogo init --force          # Overwrite existing config file
 Execute an arbitrary command in all project directories.
 
 ```bash
-# Run in each project sequentially
+# Run in every project, 4 at a time (the default)
 gogo exec "npm test"
 
-# Run in parallel
-gogo exec "npm install" --parallel
+# Run in one project after another
+gogo exec "npm install" --sequential
 
 # Run with limited concurrency
-gogo exec "npm run build" --parallel --concurrency 2
+gogo exec "npm run build" --concurrency 2
 
 # Filter to specific projects
 gogo exec "git status" --include-only api,web
@@ -389,15 +465,16 @@ gogo exec "npm install" --exclude-only docs
 gogo exec "npm test" --include-pattern "^libs/"
 ```
 
-| Option                      | Description                                |
-| --------------------------- | ------------------------------------------ |
-| `--group <names>`           | Only target projects of the named group(s) |
-| `--include-only <dirs>`     | Only run in specified directories          |
-| `--exclude-only <dirs>`     | Skip specified directories                 |
-| `--include-pattern <regex>` | Include directories matching pattern       |
-| `--exclude-pattern <regex>` | Exclude directories matching pattern       |
-| `--parallel`                | Run commands concurrently                  |
-| `--concurrency <n>`         | Max parallel processes                     |
+| Option                      | Description                                  |
+| --------------------------- | -------------------------------------------- |
+| `--group <names>`           | Only target projects of the named group(s)   |
+| `--include-only <dirs>`     | Only run in specified directories            |
+| `--exclude-only <dirs>`     | Skip specified directories                   |
+| `--include-pattern <regex>` | Include directories matching pattern         |
+| `--exclude-pattern <regex>` | Exclude directories matching pattern         |
+| `--parallel`                | Run in parallel, overriding `execution.mode` |
+| `--sequential`              | Run one project at a time                    |
+| `--concurrency <n>`         | Max parallel processes (default: 4)          |
 
 ---
 
@@ -414,11 +491,11 @@ gogo run --list
 gogo run build
 
 # Override config options with CLI flags
-gogo run test --parallel
+gogo run test --sequential
 gogo run deploy --include-only api
 
 # Commands can define defaults in .gogo:
-# - parallel: true/false
+# - parallel: true/false (false keeps the command sequential)
 # - concurrency: number
 # - groups: array of group names
 # - includeOnly/excludeOnly: array of directories
@@ -434,8 +511,9 @@ gogo run deploy --include-only api
 | `--exclude-only <dirs>`     | Skip specified directories (overrides config)                 |
 | `--include-pattern <regex>` | Include directories matching pattern (overrides config)       |
 | `--exclude-pattern <regex>` | Exclude directories matching pattern (overrides config)       |
-| `--parallel`                | Run commands concurrently (overrides config)                  |
-| `--concurrency <n>`         | Max parallel processes (overrides config)                     |
+| `--parallel`                | Run in parallel (overrides config)                            |
+| `--sequential`              | Run one project at a time (overrides config)                  |
+| `--concurrency <n>`         | Max parallel processes (overrides config, default: 4)         |
 
 ---
 
@@ -463,17 +541,18 @@ Clone any child repositories defined in `.gogo` that don't exist locally.
 
 ```bash
 gogo git update
-gogo git update --parallel
+gogo git update --sequential
 gogo git update --include-only api,web
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only update specified projects             |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Clone in parallel                          |
-| `--concurrency <n>`     | Max parallel clones                        |
+| Option                  | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| `--group <names>`       | Only target projects of the named group(s)     |
+| `--include-only <dirs>` | Only update specified projects                 |
+| `--exclude-only <dirs>` | Skip specified projects                        |
+| `--parallel`            | Clone in parallel, overriding `execution.mode` |
+| `--sequential`          | Clone one project at a time                    |
+| `--concurrency <n>`     | Max parallel clones (default: 4)               |
 
 ---
 
@@ -483,16 +562,18 @@ Show git status across all repositories.
 
 ```bash
 gogo git status
-gogo git status --parallel
+gogo git status --sequential
 gogo git status --include-only api
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only check specified projects              |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Run in parallel                            |
+| Option                  | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `--group <names>`       | Only target projects of the named group(s)   |
+| `--include-only <dirs>` | Only check specified projects                |
+| `--exclude-only <dirs>` | Skip specified projects                      |
+| `--parallel`            | Run in parallel, overriding `execution.mode` |
+| `--sequential`          | Run one project at a time                    |
+| `--concurrency <n>`     | Max parallel processes (default: 4)          |
 
 ---
 
@@ -502,16 +583,17 @@ Pull changes in all repositories.
 
 ```bash
 gogo git pull
-gogo git pull --parallel
+gogo git pull --concurrency 2
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only pull specified projects               |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Pull in parallel                           |
-| `--concurrency <n>`     | Max parallel pulls                         |
+| Option                  | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `--group <names>`       | Only target projects of the named group(s)    |
+| `--include-only <dirs>` | Only pull specified projects                  |
+| `--exclude-only <dirs>` | Skip specified projects                       |
+| `--parallel`            | Pull in parallel, overriding `execution.mode` |
+| `--sequential`          | Pull one project at a time                    |
+| `--concurrency <n>`     | Max parallel pulls (default: 4)               |
 
 ---
 
@@ -524,12 +606,14 @@ gogo git push
 gogo git push --include-only api,web
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only push specified projects               |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Push in parallel                           |
+| Option                  | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `--group <names>`       | Only target projects of the named group(s)    |
+| `--include-only <dirs>` | Only push specified projects                  |
+| `--exclude-only <dirs>` | Skip specified projects                       |
+| `--parallel`            | Push in parallel, overriding `execution.mode` |
+| `--sequential`          | Push one project at a time                    |
+| `--concurrency <n>`     | Max parallel pushes (default: 4)              |
 
 ---
 
@@ -551,14 +635,16 @@ gogo git branch feature/new-feature
 gogo git branch feature/old-feature --delete
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `-d, --delete`          | Delete the specified branch                |
-| `-a, --all`             | List all branches (local and remote)       |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only target specified projects             |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Run in parallel                            |
+| Option                  | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `-d, --delete`          | Delete the specified branch                  |
+| `-a, --all`             | List all branches (local and remote)         |
+| `--group <names>`       | Only target projects of the named group(s)   |
+| `--include-only <dirs>` | Only target specified projects               |
+| `--exclude-only <dirs>` | Skip specified projects                      |
+| `--parallel`            | Run in parallel, overriding `execution.mode` |
+| `--sequential`          | Run one project at a time                    |
+| `--concurrency <n>`     | Max parallel processes (default: 4)          |
 
 ---
 
@@ -574,13 +660,15 @@ gogo git checkout main
 gogo git checkout -b feature/new-feature
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `-b, --create`          | Create the branch if it doesn't exist      |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only target specified projects             |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Run in parallel                            |
+| Option                  | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `-b, --create`          | Create the branch if it doesn't exist        |
+| `--group <names>`       | Only target projects of the named group(s)   |
+| `--include-only <dirs>` | Only target specified projects               |
+| `--exclude-only <dirs>` | Skip specified projects                      |
+| `--parallel`            | Run in parallel, overriding `execution.mode` |
+| `--sequential`          | Run one project at a time                    |
+| `--concurrency <n>`     | Max parallel processes (default: 4)          |
 
 ---
 
@@ -592,6 +680,10 @@ Commit changes in all repositories with the same message.
 gogo git commit -m "Update dependencies"
 gogo git commit -m "Fix bug" --include-only api
 ```
+
+Commits always run one project at a time, regardless of `execution.mode` and
+`--parallel`: commit hooks and commit signing (such as a GPG passphrase prompt)
+expect one commit at a time.
 
 | Option                  | Description                                |
 | ----------------------- | ------------------------------------------ |
@@ -654,16 +746,17 @@ Run `npm install` in all projects.
 ```bash
 gogo npm install
 gogo npm i  # Alias
-gogo npm install --parallel
+gogo npm install --sequential
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only install in specified projects         |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Run in parallel                            |
-| `--concurrency <n>`     | Max parallel installs                      |
+| Option                  | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `--group <names>`       | Only target projects of the named group(s)   |
+| `--include-only <dirs>` | Only install in specified projects           |
+| `--exclude-only <dirs>` | Skip specified projects                      |
+| `--parallel`            | Run in parallel, overriding `execution.mode` |
+| `--sequential`          | Run one project at a time                    |
+| `--concurrency <n>`     | Max parallel installs (default: 4)           |
 
 ---
 
@@ -673,16 +766,17 @@ Run `npm ci` in all projects (clean install from lockfile).
 
 ```bash
 gogo npm ci
-gogo npm ci --parallel
+gogo npm ci --concurrency 2
 ```
 
-| Option                  | Description                                |
-| ----------------------- | ------------------------------------------ |
-| `--group <names>`       | Only target projects of the named group(s) |
-| `--include-only <dirs>` | Only run in specified projects             |
-| `--exclude-only <dirs>` | Skip specified projects                    |
-| `--parallel`            | Run in parallel                            |
-| `--concurrency <n>`     | Max parallel processes                     |
+| Option                  | Description                                  |
+| ----------------------- | -------------------------------------------- |
+| `--group <names>`       | Only target projects of the named group(s)   |
+| `--include-only <dirs>` | Only run in specified projects               |
+| `--exclude-only <dirs>` | Skip specified projects                      |
+| `--parallel`            | Run in parallel, overriding `execution.mode` |
+| `--sequential`          | Run one project at a time                    |
+| `--concurrency <n>`     | Max parallel processes (default: 4)          |
 
 ---
 
@@ -712,11 +806,11 @@ gogo npm link --all
 Run an npm script in all projects.
 
 ```bash
-# Run in all projects
+# Run in all projects, 4 at a time
 gogo npm run build
 
-# Run in parallel
-gogo npm run test --parallel
+# Run in one project after another
+gogo npm run test --sequential
 
 # Only run if script exists
 gogo npm run lint --if-present
@@ -728,8 +822,9 @@ gogo npm run lint --if-present
 | `--group <names>`       | Only target projects of the named group(s)    |
 | `--include-only <dirs>` | Only run in specified projects                |
 | `--exclude-only <dirs>` | Skip specified projects                       |
-| `--parallel`            | Run in parallel                               |
-| `--concurrency <n>`     | Max parallel processes                        |
+| `--parallel`            | Run in parallel, overriding `execution.mode`  |
+| `--sequential`          | Run one project at a time                     |
+| `--concurrency <n>`     | Max parallel processes (default: 4)           |
 
 ---
 
@@ -754,24 +849,25 @@ fast-forward the rest.
 ```bash
 gogo update                    # move, clone and fast-forward everything
 gogo update --dry-run          # show what would happen, change nothing
-gogo update --parallel         # clone and fast-forward concurrently
+gogo update --sequential       # clone and fast-forward one project at a time
 gogo update --no-pull          # only move and clone
 gogo update --group backend    # restrict to a group
 ```
 
-| Option                     | Description                                            |
-| -------------------------- | ------------------------------------------------------ |
-| `--dry-run`                | Show what would be done without changing anything      |
-| `--no-migrate`             | Do not move projects checked out at another path       |
-| `--no-clone`               | Do not clone projects that are missing                 |
-| `--no-pull`                | Do not fast-forward projects that are present          |
-| `--parallel`               | Clone and fast-forward concurrently                    |
-| `--concurrency <n>`        | Max parallel processes (default: 4)                    |
-| `--group <names>`          | Only target projects of the named group(s)             |
-| `--include-only <dirs>`    | Only update specified projects                         |
-| `--exclude-only <dirs>`    | Skip specified projects                                |
-| `--include-pattern <re>`   | Include projects matching a regex                      |
-| `--exclude-pattern <re>`   | Exclude projects matching a regex                      |
+| Option                   | Description                                                      |
+| ------------------------ | ---------------------------------------------------------------- |
+| `--dry-run`              | Show what would be done without changing anything                |
+| `--no-migrate`           | Do not move projects checked out at another path                 |
+| `--no-clone`             | Do not clone projects that are missing                           |
+| `--no-pull`              | Do not fast-forward projects that are present                    |
+| `--parallel`             | Clone and fast-forward concurrently, overriding `execution.mode` |
+| `--sequential`           | Clone and fast-forward one project at a time                     |
+| `--concurrency <n>`      | Max parallel processes (default: 4)                              |
+| `--group <names>`        | Only target projects of the named group(s)                       |
+| `--include-only <dirs>`  | Only update specified projects                                   |
+| `--exclude-only <dirs>`  | Skip specified projects                                          |
+| `--include-pattern <re>` | Include projects matching a regex                                |
+| `--exclude-pattern <re>` | Exclude projects matching a regex                                |
 
 **What it never does.** `gogo update` does not merge, rebase, stash, or switch
 branches. Each present project is fetched and then advanced with
@@ -824,14 +920,14 @@ gogo init
 gogo project import backend git@github.com:org/backend.git
 gogo project import frontend git@github.com:org/frontend.git
 gogo project import shared git@github.com:org/shared.git
-gogo npm install --parallel
+gogo npm install
 ```
 
 ### Daily Development Workflow
 
 ```bash
 # Start of day: pull all changes
-gogo git pull --parallel
+gogo git pull
 
 # Check status across all repos
 gogo git status
@@ -840,7 +936,7 @@ gogo git status
 gogo git checkout -b feature/my-feature
 
 # Run tests
-gogo npm run test --parallel
+gogo npm run test
 
 # Commit changes
 gogo git commit -m "Add feature"

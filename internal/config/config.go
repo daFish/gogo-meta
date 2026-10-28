@@ -100,11 +100,73 @@ func (c CommandConfig) MarshalYAML() (any, error) {
 // MetaConfig represents the .gogo configuration file. Its structure is defined
 // by gogo.schema.json; the drift test keeps the two in step.
 type MetaConfig struct {
-	Schema   string                   `json:"$schema,omitempty" yaml:"$schema,omitempty"`
-	Projects map[string]string        `json:"projects" yaml:"projects"`
-	Ignore   []string                 `json:"ignore" yaml:"ignore"`
-	Groups   map[string][]string      `json:"groups,omitempty" yaml:"groups,omitempty"`
-	Commands map[string]CommandConfig `json:"commands,omitempty" yaml:"commands,omitempty"`
+	Schema    string                   `json:"$schema,omitempty" yaml:"$schema,omitempty"`
+	Projects  map[string]string        `json:"projects" yaml:"projects"`
+	Ignore    []string                 `json:"ignore" yaml:"ignore"`
+	Groups    map[string][]string      `json:"groups,omitempty" yaml:"groups,omitempty"`
+	Commands  map[string]CommandConfig `json:"commands,omitempty" yaml:"commands,omitempty"`
+	Execution *ExecutionConfig         `json:"execution,omitempty" yaml:"execution,omitempty"`
+}
+
+// ExecutionMode is how a command runs in all projects: at once or one after
+// another. The empty mode is not set.
+type ExecutionMode string
+
+const (
+	ExecutionParallel   ExecutionMode = "parallel"
+	ExecutionSequential ExecutionMode = "sequential"
+)
+
+// ExecutionConfig is the execution block: config-wide defaults for every
+// command that runs in all projects. A key left empty is not set, so overlays
+// can override one key and keep the other.
+type ExecutionConfig struct {
+	Mode        ExecutionMode `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Concurrency *int          `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
+}
+
+// Parallel reports whether the block selects parallel mode, and whether it
+// sets a mode at all. A nil block sets nothing.
+func (e *ExecutionConfig) Parallel() (parallel, set bool) {
+	if e == nil || e.Mode == "" {
+		return false, false
+	}
+	return e.Mode == ExecutionParallel, true
+}
+
+// MaxConcurrency returns the concurrency the block sets, and whether it sets
+// one. A nil block sets nothing.
+func (e *ExecutionConfig) MaxConcurrency() (concurrency int, set bool) {
+	if e == nil || e.Concurrency == nil {
+		return 0, false
+	}
+	return *e.Concurrency, true
+}
+
+func (e *ExecutionConfig) clone() *ExecutionConfig {
+	if e == nil {
+		return nil
+	}
+	return e.mergedWith(nil)
+}
+
+// mergedWith returns a copy of the block with every key the overlay sets
+// taken from the overlay. Neither block is shared with the result.
+func (e *ExecutionConfig) mergedWith(overlay *ExecutionConfig) *ExecutionConfig {
+	merged := &ExecutionConfig{}
+	for _, layer := range []*ExecutionConfig{e, overlay} {
+		if layer == nil {
+			continue
+		}
+		if layer.Mode != "" {
+			merged.Mode = layer.Mode
+		}
+		if layer.Concurrency != nil {
+			concurrency := *layer.Concurrency
+			merged.Concurrency = &concurrency
+		}
+	}
+	return merged
 }
 
 // MetaConfigResult is the result of reading a meta config file.
@@ -616,7 +678,9 @@ func WriteMetaConfig(dir string, config MetaConfig, format ConfigFormat) error {
 	return os.WriteFile(metaPath, content, 0o644)
 }
 
-// MergeConfigs merges an overlay config into a base config.
+// MergeConfigs merges an overlay config into a base config. The execution
+// block is merged key by key: a key the overlay sets wins, one it leaves
+// unset keeps the base's value.
 func MergeConfigs(base, overlay MetaConfig) MetaConfig {
 	// Merge projects (overlay wins).
 	projects := make(map[string]string, len(base.Projects)+len(overlay.Projects))
@@ -667,12 +731,18 @@ func MergeConfigs(base, overlay MetaConfig) MetaConfig {
 		}
 	}
 
+	var execution *ExecutionConfig
+	if base.Execution != nil || overlay.Execution != nil {
+		execution = base.Execution.mergedWith(overlay.Execution)
+	}
+
 	return MetaConfig{
-		Schema:   base.Schema,
-		Projects: projects,
-		Ignore:   ignore,
-		Groups:   groups,
-		Commands: commands,
+		Schema:    base.Schema,
+		Projects:  projects,
+		Ignore:    ignore,
+		Groups:    groups,
+		Commands:  commands,
+		Execution: execution,
 	}
 }
 
@@ -692,11 +762,12 @@ func AddProject(config MetaConfig, path, url string) MetaConfig {
 	}
 	projects[path] = url
 	return MetaConfig{
-		Schema:   config.Schema,
-		Projects: projects,
-		Ignore:   config.Ignore,
-		Groups:   config.Groups,
-		Commands: config.Commands,
+		Schema:    config.Schema,
+		Projects:  projects,
+		Ignore:    config.Ignore,
+		Groups:    config.Groups,
+		Commands:  config.Commands,
+		Execution: config.Execution.clone(),
 	}
 }
 
@@ -747,11 +818,12 @@ func RemoveProject(config MetaConfig, path string) MetaConfig {
 	}
 
 	return MetaConfig{
-		Schema:   config.Schema,
-		Projects: projects,
-		Ignore:   config.Ignore,
-		Groups:   groups,
-		Commands: commands,
+		Schema:    config.Schema,
+		Projects:  projects,
+		Ignore:    config.Ignore,
+		Groups:    groups,
+		Commands:  commands,
+		Execution: config.Execution.clone(),
 	}
 }
 

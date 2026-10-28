@@ -52,6 +52,44 @@ func TestExecRefusesAConfigTheSchemaRejects(t *testing.T) {
 			args:     []string{"-f", ".gogo.devops.yaml", "exec", "touch marker"},
 			rejected: `.gogo.devops.yaml: unknown key "ignores"`,
 		},
+		{
+			name: "accepted execution block runs the command",
+			files: map[string]string{".gogo": `{"projects":{"api":"git@example.com:org/api.git"},` +
+				`"execution":{"mode":"sequential","concurrency":2}}`},
+			args:     []string{"exec", "touch marker"},
+			rejected: "",
+		},
+		{
+			name: "typo inside execution in the primary config",
+			files: map[string]string{".gogo": `{"projects":{"api":"git@example.com:org/api.git"},` +
+				`"execution":{"mdoe":"sequential"}}`},
+			args:     []string{"exec", "touch marker"},
+			rejected: `.gogo: execution: unknown key "mdoe" (allowed: mode, concurrency)`,
+		},
+		{
+			name:     "typo inside execution in .gogo.local",
+			files:    map[string]string{".gogo": validPrimary, ".gogo.local": `{"execution":{"mdoe":"sequential"}}`},
+			args:     []string{"exec", "touch marker"},
+			rejected: `.gogo.local: execution: unknown key "mdoe" (allowed: mode, concurrency)`,
+		},
+		{
+			name:     "typo inside execution in an overlay",
+			files:    map[string]string{".gogo": validPrimary, ".gogo.devops.yaml": "execution:\n  mdoe: sequential\n"},
+			args:     []string{"-f", ".gogo.devops.yaml", "exec", "touch marker"},
+			rejected: `.gogo.devops.yaml: execution: unknown key "mdoe" (allowed: mode, concurrency)`,
+		},
+		{
+			name:     "misspelled execution block in .gogo.local",
+			files:    map[string]string{".gogo": validPrimary, ".gogo.local": `{"executoin":{"mode":"sequential"}}`},
+			args:     []string{"exec", "touch marker"},
+			rejected: `.gogo.local: unknown key "executoin" (allowed: $schema, projects, ignore, groups, commands, execution)`,
+		},
+		{
+			name:     "invalid execution mode in the primary config",
+			files:    map[string]string{".gogo": `{"projects":{},"execution":{"mode":"serial"}}`},
+			args:     []string{"exec", "touch marker"},
+			rejected: `.gogo: execution.mode: must be one of "parallel", "sequential" (got "serial")`,
+		},
 	}
 
 	for _, tc := range cases {

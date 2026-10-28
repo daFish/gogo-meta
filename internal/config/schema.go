@@ -203,11 +203,7 @@ func (s *configSchema) translate(err *jsonschema.ValidationError, document any) 
 	case *kind.Type:
 		return problem(fmt.Sprintf("must be %s (got %s)", describeTypes(k.Want), describeValue(value)))
 	case *kind.Enum:
-		allowed := make([]string, len(k.Want))
-		for i, want := range k.Want {
-			allowed[i] = describeValue(want)
-		}
-		return problem(fmt.Sprintf("must be one of %s (got %s)", strings.Join(allowed, ", "), describeValue(value)))
+		return problem(fmt.Sprintf("must be one of %s (got %s)", describeEnum(k.Want), describeValue(value)))
 	case *kind.Minimum:
 		return problem(fmt.Sprintf("must be >= %s (got %s)", formatRat(k.Want), describeValue(value)))
 	case *kind.Maximum:
@@ -240,6 +236,18 @@ func describeTypes(want []string) string {
 		}
 	}
 	return strings.Join(names, " or ")
+}
+
+// describeEnum lists the allowed values of an enum. Like describeTypes, it
+// does not offer null as a fix unless null is the only value.
+func describeEnum(want []any) string {
+	var values []string
+	for _, value := range want {
+		if value != nil || len(want) == 1 {
+			values = append(values, describeValue(value))
+		}
+	}
+	return strings.Join(values, ", ")
 }
 
 func describeValue(value any) string {

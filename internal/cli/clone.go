@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/daFish/gogo-meta/internal/executor"
 	"github.com/daFish/gogo-meta/internal/giturl"
@@ -28,7 +29,47 @@ type cloneOutcome struct {
 // target, in input order. Cloning runs through loop.RunEach, so it honors
 // parallel and concurrency the same way the loop commands do. A non-nil progress
 // is advanced once per finished target.
+//
+// A target nested inside another target is cloned only after it: git refuses
+// to clone into a directory that is not empty, so the parent has to be in place
+// before a clone fills it. Targets are therefore cloned in waves by nesting
+// depth, and only the targets of one wave run at the same time.
 func cloneMissing(ctx context.Context, ex executor.Executor, metaDir string, targets []cloneTarget, parallel bool, concurrency int, progress *output.Progress) []cloneOutcome {
+	outcomes := make([]cloneOutcome, len(targets))
+	for _, wave := range cloneWaves(targets) {
+		waveTargets := make([]cloneTarget, len(wave))
+		for i, idx := range wave {
+			waveTargets[i] = targets[idx]
+		}
+		for i, outcome := range cloneConcurrently(ctx, ex, metaDir, waveTargets, parallel, concurrency, progress) {
+			outcomes[wave[i]] = outcome
+		}
+	}
+	return outcomes
+}
+
+// cloneWaves groups the indexes of targets by how many other targets contain
+// them, in input order within each group. The targets containing one target
+// form a chain, so a target always lands in a later wave than its ancestors and
+// no wave holds both a target and one nested in it.
+func cloneWaves(targets []cloneTarget) [][]int {
+	var waves [][]int
+	for idx, target := range targets {
+		depth := 0
+		for _, other := range targets {
+			if strings.HasPrefix(target.Path, other.Path+"/") {
+				depth++
+			}
+		}
+		for len(waves) <= depth {
+			waves = append(waves, nil)
+		}
+		waves[depth] = append(waves[depth], idx)
+	}
+	return waves
+}
+
+func cloneConcurrently(ctx context.Context, ex executor.Executor, metaDir string, targets []cloneTarget, parallel bool, concurrency int, progress *output.Progress) []cloneOutcome {
 	paths := make([]string, len(targets))
 	byPath := make(map[string]cloneTarget, len(targets))
 	for i, t := range targets {
