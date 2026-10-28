@@ -68,12 +68,12 @@ internal/
 │   ├── gitstate.go        # porcelain=v2 inspection, fetch, ahead/behind, --ff-only
 │   └── gitstate_test.go
 ├── loop/
-│   ├── loop.go            # Sequential + parallel orchestration, RunEach worker pool
+│   ├── loop.go            # Sequential + parallel orchestration (output in config order), RunEach worker pool
 │   └── loop_test.go
 ├── output/
 │   ├── output.go          # Terminal formatting, symbols, summary
 │   ├── output_test.go
-│   ├── progress.go        # TTY-only spinner/progress line for long phases
+│   ├── progress.go        # TTY-only spinner/progress line for long phases and parallel loops
 │   └── progress_test.go
 └── ssh/
     ├── ssh.go             # SSH host extraction, known_hosts
@@ -98,7 +98,7 @@ make all            # Clean, lint, test-coverage, then build
 
 ```bash
 gogo init                          # Create .gogo file
-gogo exec "<command>" [--parallel] # Run command across repos
+gogo exec "<command>" [--sequential]  # Run command across repos (parallel by default)
 gogo exec --group foo "<command>"  # Restrict to the projects of group foo
 gogo run [name]                    # Run predefined command from .gogo
 gogo validate                      # Validate config file(s)
@@ -114,6 +114,8 @@ gogo npm install|ci|link|run
 gogo -f .gogo.devops exec "..."    # Merge additional config file
 gogo -f a.yaml -f b.yaml exec "..."  # Multiple overlays
 gogo --group foo,bar exec "..."    # Filter by named group(s) from the config
+gogo --concurrency 2 exec "..."    # Parallel with at most 2 workers
+gogo --sequential exec "..."       # One project at a time
 ```
 
 ## Code Conventions
@@ -156,7 +158,11 @@ Precedence: `.gogo` > `.gogo.yaml` > `.gogo.yml`.
   "commands": {
     "build": "npm run build",
     "test": { "cmd": "npm test", "parallel": true },
-    "deploy": { "cmd": "make deploy", "groups": ["foo"] }
+    "deploy": { "cmd": "make deploy", "groups": ["foo"], "parallel": false }
+  },
+  "execution": {
+    "mode": "parallel",
+    "concurrency": 4
   }
 }
 ```
@@ -179,6 +185,10 @@ commands:
     cmd: make deploy
     groups:
       - foo
+    parallel: false
+execution:
+  mode: parallel
+  concurrency: 4
 ```
 
 ### Groups
@@ -196,6 +206,21 @@ loaded still counts.
 Reading stays permissive about these cross-references because an overlay may
 group projects declared in the base config and vice versa. It is not permissive
 about unknown keys: the schema rejects them in every file, overlays included.
+
+### Execution
+
+Loop commands run in parallel by default (`loop.DefaultConcurrency` workers).
+`resolveExecution` (`internal/cli/helpers.go`) decides mode and concurrency
+independently, each from the first source that sets it: `--parallel` /
+`--sequential` / `--concurrency`, then `commands.<name>` (`gogo run` only), then
+the merged config's `execution` block, then the built-in default. A flag counts
+only when it was passed (`Changed`), so loop commands load the config before
+resolving. `MergeConfigs` merges `execution` key by key. `gogo git commit`
+ignores all three flags and always runs sequentially.
+
+A parallel `loop.Loop` prints each project's block once that project and every
+earlier one are done, so the output matches a sequential run; anything printed
+while an `output.Progress` line is shown goes through `Progress.Print`.
 
 ### Converging the working copy
 

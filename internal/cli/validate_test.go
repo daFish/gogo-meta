@@ -216,7 +216,7 @@ func TestValidateReportsSchemaProblemsPerFile(t *testing.T) {
 	for _, line := range []string{
 		`.gogo commands.build.concurrency: must be >= 1 (got 0)`,
 		`.gogo commands.test: unknown key "parallell" (allowed: cmd, description, parallel, concurrency, groups, includeOnly, excludeOnly, includePattern, excludePattern)`,
-		`.gogo.local unknown key "group" (allowed: $schema, projects, ignore, groups, commands)`,
+		`.gogo.local unknown key "group" (allowed: $schema, projects, ignore, groups, commands, execution)`,
 	} {
 		assert.Equal(t, 1, strings.Count(out, line), "expected exactly one %q in:\n%s", line, out)
 	}
@@ -244,4 +244,48 @@ func TestValidateReportsSchemaProblemsOfAPrimaryConfigInAParentDirectory(t *test
 
 	require.Error(t, runValidate(nil, nil))
 	assert.Contains(t, buf.String(), filepath.Join(parent, ".gogo")+`: unknown key "ignores"`)
+}
+
+func TestValidateReportsExecutionTypos(t *testing.T) {
+	const validPrimary = `{"projects":{"api":"urlA"}}`
+	tests := []struct {
+		name     string
+		files    map[string]string
+		overlays []string
+		want     string
+	}{
+		{
+			name:  "typo in .gogo",
+			files: map[string]string{".gogo": `{"projects":{"api":"urlA"},"execution":{"mdoe":"sequential"}}`},
+			want:  `.gogo execution: unknown key "mdoe" (allowed: mode, concurrency)`,
+		},
+		{
+			name:  "typo in .gogo.local",
+			files: map[string]string{".gogo": validPrimary, ".gogo.local": `{"execution":{"mdoe":"sequential"}}`},
+			want:  `.gogo.local execution: unknown key "mdoe" (allowed: mode, concurrency)`,
+		},
+		{
+			name:     "typo in a -f overlay",
+			files:    map[string]string{".gogo": validPrimary, ".gogo.ci.yaml": "execution:\n  mdoe: sequential\n"},
+			overlays: []string{".gogo.ci.yaml"},
+			want:     `.gogo.ci.yaml execution: unknown key "mdoe" (allowed: mode, concurrency)`,
+		},
+		{
+			name:  "misspelled block name in .gogo.local",
+			files: map[string]string{".gogo": validPrimary, ".gogo.local": `{"executoin":{"mode":"sequential"}}`},
+			want:  `.gogo.local unknown key "executoin" (allowed: $schema, projects, ignore, groups, commands, execution)`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := inValidatedDir(t, tt.files)
+			require.NoError(t, os.MkdirAll("api", 0o755))
+			config.SetOverlayFiles(tt.overlays)
+			t.Cleanup(func() { config.SetOverlayFiles(nil) })
+
+			require.Error(t, runValidate(nil, nil))
+			assert.Contains(t, buf.String(), tt.want)
+		})
+	}
 }

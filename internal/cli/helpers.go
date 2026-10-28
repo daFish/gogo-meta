@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/daFish/gogo-meta/internal/config"
@@ -36,9 +38,115 @@ func addFilterFlags(cmd *cobra.Command) {
 	cmd.Flags().String("exclude-pattern", "", "Exclude directories matching regex pattern")
 }
 
+const (
+	parallelFlagUsage    = "Run in parallel (default unless the config sets execution.mode: sequential)"
+	sequentialFlagUsage  = "Run one project at a time"
+	concurrencyFlagUsage = "Max parallel processes (default: 4, or execution.concurrency)"
+)
+
 func addParallelFlags(cmd *cobra.Command) {
-	cmd.Flags().Bool("parallel", false, "Execute commands in parallel")
-	cmd.Flags().Int("concurrency", 0, "Max parallel processes (default: 4)")
+	cmd.Flags().Bool("parallel", false, parallelFlagUsage)
+	cmd.Flags().Bool("sequential", false, sequentialFlagUsage)
+	cmd.Flags().Int("concurrency", 0, concurrencyFlagUsage)
+}
+
+// executionFlags holds what --parallel, --sequential and --concurrency asked
+// for. A nil field was not passed. --parallel=false asks for sequential mode
+// and --sequential=false for parallel mode.
+type executionFlags struct {
+	parallel    *bool
+	concurrency *int
+}
+
+// passedFlag returns the value of the flag named name if it was passed, whether
+// it is the command's own flag or one inherited from the root.
+func passedFlag(cmd *cobra.Command, name string) (value string, passed bool) {
+	if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
+		return flag.Value.String(), true
+	}
+	if flag := cmd.InheritedFlags().Lookup(name); flag != nil && flag.Changed {
+		return flag.Value.String(), true
+	}
+	return "", false
+}
+
+func readExecutionFlags(cmd *cobra.Command) (executionFlags, error) {
+	var flags executionFlags
+
+	parallelValue, parallelPassed := passedFlag(cmd, "parallel")
+	sequentialValue, sequentialPassed := passedFlag(cmd, "sequential")
+	switch {
+	case parallelPassed && sequentialPassed:
+		return executionFlags{}, errors.New("--parallel and --sequential cannot be used together")
+	case parallelPassed:
+		parallel, err := strconv.ParseBool(parallelValue)
+		if err != nil {
+			return executionFlags{}, err
+		}
+		flags.parallel = &parallel
+	case sequentialPassed:
+		sequential, err := strconv.ParseBool(sequentialValue)
+		if err != nil {
+			return executionFlags{}, err
+		}
+		parallel := !sequential
+		flags.parallel = &parallel
+	}
+
+	if value, passed := passedFlag(cmd, "concurrency"); passed {
+		concurrency, err := strconv.Atoi(value)
+		if err != nil {
+			return executionFlags{}, err
+		}
+		if concurrency < 1 {
+			return executionFlags{}, fmt.Errorf("--concurrency must be at least 1 (got %d)", concurrency)
+		}
+		flags.concurrency = &concurrency
+	}
+
+	return flags, nil
+}
+
+// resolve decides the mode and the concurrency, each from the first source
+// that sets it: the flags, the command definition of gogo run (commandDef may
+// be nil), the execution block of the merged config, and the built-in default
+// of parallel mode with loop.DefaultConcurrency workers.
+func (f executionFlags) resolve(cfg config.MetaConfig, commandDef *config.CommandConfig) (parallel bool, concurrency int) {
+	switch {
+	case f.parallel != nil:
+		parallel = *f.parallel
+	case commandDef != nil && commandDef.Parallel != nil:
+		parallel = *commandDef.Parallel
+	default:
+		configParallel, set := cfg.Execution.Parallel()
+		parallel = configParallel || !set
+	}
+
+	switch {
+	case f.concurrency != nil:
+		concurrency = *f.concurrency
+	case commandDef != nil && commandDef.Concurrency != nil:
+		concurrency = *commandDef.Concurrency
+	default:
+		configConcurrency, set := cfg.Execution.MaxConcurrency()
+		concurrency = loop.DefaultConcurrency
+		if set {
+			concurrency = configConcurrency
+		}
+	}
+
+	return parallel, concurrency
+}
+
+// resolveExecution reads the execution flags of cmd and resolves them against
+// the merged config and, for gogo run, the command definition.
+func resolveExecution(cmd *cobra.Command, cfg config.MetaConfig, commandDef *config.CommandConfig) (parallel bool, concurrency int, err error) {
+	flags, err := readExecutionFlags(cmd)
+	if err != nil {
+		return false, 0, err
+	}
+	parallel, concurrency = flags.resolve(cfg, commandDef)
+	return parallel, concurrency, nil
 }
 
 func getStringFlag(cmd *cobra.Command, name string) string {
@@ -54,14 +162,6 @@ func getBoolFlag(cmd *cobra.Command, name string) bool {
 	val, err := cmd.Flags().GetBool(name)
 	if err != nil {
 		val, _ = cmd.InheritedFlags().GetBool(name)
-	}
-	return val
-}
-
-func getIntFlag(cmd *cobra.Command, name string) int {
-	val, err := cmd.Flags().GetInt(name)
-	if err != nil || val == 0 {
-		val, _ = cmd.InheritedFlags().GetInt(name)
 	}
 	return val
 }
@@ -110,15 +210,21 @@ func resolveFilterOptionsWithConfig(cmd *cobra.Command, cfg *config.MetaConfig) 
 	return opts, nil
 }
 
-func resolveLoopOptions(cmd *cobra.Command) (loop.Options, error) {
-	filterOpts, err := resolveFilterOptions(cmd)
+// resolveLoopOptions resolves the filter and execution flags of cmd against
+// the merged config.
+func resolveLoopOptions(cmd *cobra.Command, cfg config.MetaConfig) (loop.Options, error) {
+	filterOpts, err := resolveFilterOptionsWithConfig(cmd, &cfg)
+	if err != nil {
+		return loop.Options{}, err
+	}
+	parallel, concurrency, err := resolveExecution(cmd, cfg, nil)
 	if err != nil {
 		return loop.Options{}, err
 	}
 	return loop.Options{
 		Options:     filterOpts,
-		Parallel:    getBoolFlag(cmd, "parallel"),
-		Concurrency: getIntFlag(cmd, "concurrency"),
+		Parallel:    parallel,
+		Concurrency: concurrency,
 	}, nil
 }
 
@@ -194,19 +300,36 @@ func requireMetaDir() (string, error) {
 	return metaDir, nil
 }
 
-func newShellExecutor() executor.Executor {
+// newShellExecutor creates the executor the commands run in projects with.
+// Override in tests.
+var newShellExecutor = func() executor.Executor {
 	return executor.NewShellExecutor()
 }
 
-// runLoopCommand resolves config + meta dir and runs command across all
-// projects with opts, exiting non-zero if any project failed. Shared body of
-// the exec/git/npm loop commands.
-func runLoopCommand(ctx context.Context, command loop.CommandFn, opts loop.Options) error {
-	loopCtx, err := loadLoopContext()
+// runLoopCommand runs command across all projects with the options of cmd,
+// exiting non-zero if any project failed. Shared body of the exec/git/npm loop
+// commands.
+func runLoopCommand(cmd *cobra.Command, command loop.CommandFn) error {
+	loopCtx, opts, err := prepareLoop(cmd)
 	if err != nil {
 		return err
 	}
-	return runLoop(ctx, command, loopCtx, opts)
+	return runLoop(cmd.Context(), command, loopCtx, opts)
+}
+
+// prepareLoop loads the config before anything is printed, so a rejected
+// config stops a command before it announces or runs anything, and then
+// resolves the options of cmd against it.
+func prepareLoop(cmd *cobra.Command) (loop.Context, loop.Options, error) {
+	loopCtx, err := loadLoopContext()
+	if err != nil {
+		return loop.Context{}, loop.Options{}, err
+	}
+	opts, err := resolveLoopOptions(cmd, loopCtx.Config)
+	if err != nil {
+		return loop.Context{}, loop.Options{}, err
+	}
+	return loopCtx, opts, nil
 }
 
 func loadLoopContext() (loop.Context, error) {
