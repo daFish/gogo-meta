@@ -17,11 +17,16 @@ func TestCanonicalEqual(t *testing.T) {
 		{"trailing slash", "https://github.com/org/api.git", "https://github.com/org/api.git/"},
 		{"ssh vs scp", "ssh://git@github.com/org/api.git", "git@github.com:org/api.git"},
 		{"path case on a case-insensitive forge", "https://github.com/Org/Api.git", "https://github.com/org/api.git"},
+		{".git suffix case on a case-insensitive forge", "https://github.com/org/api.GIT", "https://github.com/org/api"},
 		{"host case", "https://GitHub.com/org/api.git", "https://github.com/org/api.git"},
 		{"ssh port vs https", "ssh://git@git.example.com:2222/org/api.git", "https://git.example.com/org/api.git"},
 		{"user info", "https://user@git.example.com/org/api.git", "https://git.example.com/org/api"},
 		{"duplicate slashes", "https://github.com/org//api.git", "https://github.com/org/api.git"},
 		{"scp with IPv6 host", "git@[::1]:org/api.git", "ssh://git@[::1]/org/api.git"},
+		// Accepted: forges ignore these differences. On a plain ssh server they
+		// can name different repositories (docs/plans/gogo-update.md, open question 1).
+		{"accepted: scp relative path vs absolute path and user", "alice@git.example.com:api.git", "bob@git.example.com:/api.git"},
+		{"accepted: two ports on one host", "https://git.example.com:8080/org/api.git", "https://git.example.com:8443/org/api.git"},
 		{"local trailing slash", "/remotes/api.git/", "/remotes/api.git"},
 		{"file scheme vs local path", "file:///remotes/api.git", "/remotes/api.git"},
 		{"surrounding whitespace", " git@github.com:org/api.git\n", "git@github.com:org/api.git"},
@@ -45,6 +50,8 @@ func TestCanonicalDistinct(t *testing.T) {
 		{"local path case", "/remotes/Api.git", "/remotes/api.git"},
 		{"local path vs network remote", "/github.com/org/api.git", "https://github.com/org/api.git"},
 		{"Windows drive vs scp host", "C:/repos/api.git", "cc:/repos/api.git"},
+		{"encoded dot segments", "https://github.com/org/%2e%2e/other/api.git", "https://github.com/other/api.git"},
+		{"encoded slash", "https://git.example.com/org/api%2Fweb.git", "https://git.example.com/org/api/web.git"},
 		{"empty vs anything", "", "git@github.com:org/api.git"},
 	}
 	for _, tc := range differentRepositories {

@@ -425,6 +425,22 @@ func TestUpdateConflictAbortsMovesButNotTheRest(t *testing.T) {
 		"an unrelated missing project is still cloned")
 }
 
+func TestUpdateConflictHidesCredentialsOfTheFoundRemote(t *testing.T) {
+	const fakeToken = "ghp_SECRET"
+	dir := setupMetaRepo(t, map[string]string{"libs/api": "git@github.com:org/api.git"})
+	mkGitRepo(t, dir, "libs/api")
+	ex := &updateExecutor{repos: map[string]repoState{
+		repoDir(dir, "libs/api"): {remote: "https://deploy:" + fakeToken + "@github.com/org/web.git"},
+	}}
+	buf := captureOutput(t)
+
+	_, err := runUpdate(context.Background(), ex, dir, updateOptions{})
+
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "(found https://github.com/org/web.git)")
+	assert.NotContains(t, buf.String(), fakeToken)
+}
+
 func TestUpdateReportsEachProjectExactlyOnce(t *testing.T) {
 	dir := setupMetaRepo(t, map[string]string{
 		"present":    "git@x:o/present.git",

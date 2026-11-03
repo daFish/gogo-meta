@@ -119,6 +119,16 @@ func pruneEmptyParents(metaDir, movedFrom string) {
 	}
 }
 
+// reason describes the conflict for the user. The remote found on disk is shown
+// without its user info, which may hold a token.
+func (c migrateConflict) reason() string {
+	found := giturl.Redact(c.found)
+	if found == "" {
+		found = "no remote"
+	}
+	return fmt.Sprintf("occupied by a different repository (found %s)", found)
+}
+
 // planMigration classifies every selected project against the working copy. It
 // only inspects; nothing is moved.
 func planMigration(ctx context.Context, ex executor.Executor, metaDir string, cfg config.MetaConfig, selected []string) (migrationPlan, error) {
@@ -135,7 +145,7 @@ func planMigration(ctx context.Context, ex executor.Executor, metaDir string, cf
 
 		if config.FileExists(targetDir) {
 			targetRemote := getRemoteURL(ctx, ex, targetDir)
-			if giturl.Canonical(targetRemote) != url {
+			if found := giturl.Canonical(targetRemote); found == "" || found != url {
 				plan.conflicts = append(plan.conflicts, migrateConflict{path: projectPath, found: targetRemote})
 				continue
 			}
@@ -147,7 +157,7 @@ func planMigration(ctx context.Context, ex executor.Executor, metaDir string, cf
 		switch {
 		case ambiguousURLs[url]:
 			plan.ambiguous = append(plan.ambiguous, projectPath)
-		case source != "" && !claimed[source] && !ownsCheckout(cfg, source, url):
+		case source != "" && !claimed[source] && !ownsCheckout(metaDir, cfg, source, url):
 			claimed[source] = true
 			plan.moves = append(plan.moves, migrateMove{from: source, to: projectPath})
 		default:
@@ -157,13 +167,27 @@ func planMigration(ctx context.Context, ex executor.Executor, metaDir string, cf
 	return plan, nil
 }
 
-// ownsCheckout reports whether the checkout at path already serves the
-// configured project of that name. Moving it would only trade one missing
+// ownsCheckout reports whether the checkout at path already serves a configured
+// project of the same repository. Moving it would only trade one missing
 // project for another, so a config that lists one repository at two paths gets
-// a second clone instead.
-func ownsCheckout(cfg config.MetaConfig, path, canonicalURL string) bool {
-	configured, ok := cfg.Projects[path]
-	return ok && giturl.Canonical(configured) == canonicalURL
+// a second clone instead. Ownership is decided by the filesystem rather than by
+// comparing strings, so "./libs/api", "libs//api" and, on a case-insensitive
+// filesystem, "Libs/API" all own a checkout at libs/api.
+func ownsCheckout(metaDir string, cfg config.MetaConfig, path, canonicalURL string) bool {
+	checkout, err := os.Stat(filepath.Join(metaDir, path))
+	if err != nil {
+		return false
+	}
+	for projectPath, configured := range cfg.Projects {
+		if giturl.Canonical(configured) != canonicalURL {
+			continue
+		}
+		project, err := os.Stat(filepath.Join(metaDir, projectPath))
+		if err == nil && os.SameFile(checkout, project) {
+			return true
+		}
+	}
+	return false
 }
 
 // applyMoves renames each working copy to its configured path and keeps the
@@ -238,11 +262,7 @@ func runMigrate(ctx context.Context, ex executor.Executor, cwd string, dryRun bo
 
 	if len(plan.conflicts) > 0 {
 		for _, c := range plan.conflicts {
-			found := c.found
-			if found == "" {
-				found = "no remote"
-			}
-			output.ProjectStatus(c.path, "error", fmt.Sprintf("occupied by a different repository (found %s)", found))
+			output.ProjectStatus(c.path, "error", c.reason())
 		}
 		return 0, errors.New(migrationAbortedMsg) //nolint:staticcheck // capitalized for JS parity
 	}

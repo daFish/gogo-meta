@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -324,6 +325,22 @@ func TestPlanMigrationMatchesRemoteSpellings(t *testing.T) {
 	assert.Equal(t, []migrateMove{{from: "old/shared", to: "libs/shared"}}, plan.moves)
 }
 
+func TestPlanMigrationNeverMatchesAMissingRemote(t *testing.T) {
+	for _, configured := range []string{"", "  "} {
+		t.Run("configured URL "+strconv.Quote(configured), func(t *testing.T) {
+			dir := t.TempDir()
+			mkGitRepo(t, dir, "libs/api")
+			cfg := config.MetaConfig{Projects: map[string]string{"libs/api": configured}}
+
+			plan, err := planMigration(context.Background(), &fakeExecutor{}, dir, cfg, []string{"libs/api"})
+			require.NoError(t, err)
+
+			assert.Empty(t, plan.present, "a directory without a remote does not serve any repository")
+			assert.Equal(t, []migrateConflict{{path: "libs/api", found: ""}}, plan.conflicts)
+		})
+	}
+}
+
 func TestPlanMigrationMovesACheckoutAtMostOnce(t *testing.T) {
 	t.Run("a checkout serving its own project stays put", func(t *testing.T) {
 		dir := t.TempDir()
@@ -360,6 +377,21 @@ func TestPlanMigrationMovesACheckoutAtMostOnce(t *testing.T) {
 		assert.Equal(t, []string{"mirrors/api"}, plan.missing)
 	})
 
+	for _, spelling := range []string{"./libs/api", "libs/api/", "libs//api"} {
+		t.Run("a checkout serving "+spelling+" stays put", func(t *testing.T) {
+			assertCheckoutStaysWithItsProject(t, spelling)
+		})
+	}
+
+	t.Run("a checkout serving a differently cased path stays put on a case-insensitive filesystem", func(t *testing.T) {
+		probe := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(probe, "lower"), 0o755))
+		if !config.FileExists(filepath.Join(probe, "LOWER")) {
+			t.Skip("the filesystem is case-sensitive")
+		}
+		assertCheckoutStaysWithItsProject(t, "Libs/API")
+	})
+
 	t.Run("a checkout held by a conflicting project is still moved", func(t *testing.T) {
 		dir := t.TempDir()
 		swapped := mkGitRepo(t, dir, "libs/api")
@@ -377,6 +409,53 @@ func TestPlanMigrationMovesACheckoutAtMostOnce(t *testing.T) {
 		assert.Equal(t, "libs/api", plan.conflicts[0].path)
 		assert.Equal(t, []migrateMove{{from: "libs/api", to: "libs/web"}}, plan.moves)
 	})
+}
+
+// assertCheckoutStaysWithItsProject checks a checkout at libs/api against a
+// config that lists its repository under projectKey, another spelling of
+// libs/api, and under mirrors/api.
+func assertCheckoutStaysWithItsProject(t *testing.T, projectKey string) {
+	t.Helper()
+	dir := t.TempDir()
+	api := mkGitRepo(t, dir, "libs/api")
+
+	cfg := config.MetaConfig{Projects: map[string]string{
+		projectKey:    "https://github.com/org/api.git",
+		"mirrors/api": "git@github.com:org/api.git",
+	}}
+	ex := &fakeExecutor{remotes: map[string]string{
+		api:                            "git@github.com:org/api.git",
+		filepath.Join(dir, projectKey): "git@github.com:org/api.git",
+	}}
+
+	plan, err := planMigration(context.Background(), ex, dir, cfg, []string{projectKey, "mirrors/api"})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{projectKey}, plan.present)
+	assert.Empty(t, plan.moves, "a checkout must never move away from a project it already serves")
+	assert.Equal(t, []string{"mirrors/api"}, plan.missing)
+}
+
+func TestMigrateConflictHidesCredentialsOfTheFoundRemote(t *testing.T) {
+	for _, tc := range []struct{ name, remote, shown string }{
+		{"user and password", "https://deploy:ghp_SECRET@github.com/org/web.git", "https://github.com/org/web.git"},
+		{"token as user name", "https://ghp_SECRET@github.com/org/web.git", "https://github.com/org/web.git"},
+		{"ssh password", "ssh://deploy:ghp_SECRET@git.example.com/org/web.git", "ssh://git.example.com/org/web.git"},
+		{"unparseable URL", "https://deploy:ghp_SECRET@github.com/org/%zz", "https://github.com/org/%zz"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeGogo(t, dir, `{"projects":{"api":"git@github.com:org/api.git"}}`)
+			target := mkGitRepo(t, dir, "api")
+			buf := captureOutput(t)
+
+			_, err := runMigrate(context.Background(), &fakeExecutor{remotes: map[string]string{target: tc.remote}}, dir, false)
+
+			require.Error(t, err)
+			assert.Contains(t, buf.String(), "(found "+tc.shown+")")
+			assert.NotContains(t, buf.String(), "ghp_SECRET")
+		})
+	}
 }
 
 func TestMigrateAcceptsAnotherSpellingOfTheRemote(t *testing.T) {
