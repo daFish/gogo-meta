@@ -18,7 +18,7 @@ var transportHelper = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*::`)
 // "ext::". Normal schemes (https, http, ssh, git, file, ...) and scp-style
 // "user@host:path" URLs are allowed.
 func Validate(rawURL string) error {
-	if rawURL == "" {
+	if strings.TrimSpace(rawURL) == "" {
 		return fmt.Errorf("empty git URL")
 	}
 	if strings.HasPrefix(rawURL, "-") {

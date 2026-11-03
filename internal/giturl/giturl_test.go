@@ -28,6 +28,7 @@ func TestValidate(t *testing.T) {
 		url  string
 	}{
 		{"empty", ""},
+		{"whitespace only", " \t\n"},
 		{"leading dash", "--upload-pack=touch /tmp/x"},
 		{"ext transport", "ext::sh -c 'touch /tmp/x'"},
 		{"fd transport", "fd::17"},

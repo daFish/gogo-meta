@@ -189,11 +189,7 @@ func runUpdate(ctx context.Context, ex executor.Executor, cwd string, opts updat
 
 func runMovePhase(recorder *outcomeRecorder, plan migrationPlan, opts updateOptions, metaDir string, localProjects map[string]string, pullTargets []pullTarget) []pullTarget {
 	for _, c := range plan.conflicts {
-		found := c.found
-		if found == "" {
-			found = "no remote"
-		}
-		recorder.record(c.path, outcomeFailed, fmt.Sprintf("occupied by a different repository (found %s)", found))
+		recorder.record(c.path, outcomeFailed, c.reason())
 	}
 
 	if len(plan.moves) == 0 {

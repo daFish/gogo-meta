@@ -18,7 +18,9 @@ var caseInsensitiveForges = map[string]bool{
 // Canonical reduces a git remote URL to a form in which two spellings of the
 // same repository compare equal: the transport, user and port are dropped, the
 // host is lowercased, and trailing slashes and a ".git" suffix are removed.
-// Paths on case-insensitive forges are lowercased as well. Local paths keep
+// Paths on case-insensitive forges are lowercased as well. Percent-encoding is
+// kept as written, so an encoded "/" or ".." never merges path segments; at
+// worst, two spellings of one repository stay unequal. Local paths keep
 // their case and carry a "file:" prefix, so they never equal a network remote.
 //
 // The result is for comparison only and must never be handed to git: the
@@ -36,7 +38,7 @@ func Canonical(rawURL string) string {
 		if u.Scheme == "file" {
 			return canonicalLocal(u.Path)
 		}
-		return canonicalRemote(u.Hostname(), u.Path)
+		return canonicalRemote(u.Hostname(), u.EscapedPath())
 	}
 	if host, repoPath, ok := splitSCP(raw); ok {
 		return canonicalRemote(host, repoPath)
@@ -76,11 +78,11 @@ func splitSCP(raw string) (host, repoPath string, ok bool) {
 
 func canonicalRemote(host, repoPath string) string {
 	host = strings.ToLower(host)
-	repoPath = strings.Trim(trimRepoSuffix(path.Clean("/"+repoPath)), "/")
+	repoPath = path.Clean("/" + repoPath)
 	if caseInsensitiveForges[host] {
 		repoPath = strings.ToLower(repoPath)
 	}
-	return host + "/" + repoPath
+	return host + "/" + strings.Trim(trimRepoSuffix(repoPath), "/")
 }
 
 func canonicalLocal(localPath string) string {

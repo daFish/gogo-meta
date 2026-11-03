@@ -775,11 +775,23 @@ New messages introduced by `gogo update` are the ones listed in §3.4. `gogo git
      that a repository cloned over ssh under an https config is a conflict that aborts every move.
    - Hosts are case-folded everywhere; paths only on github.com, gitlab.com and bitbucket.org, which
      are known to be case-insensitive. Ports and user info are ignored. Local paths keep their case.
+   - Accepted gaps, because forges ignore these differences: an scp-style relative path
+     (`host:api.git`, relative to the login user's home) equals the absolute `host:/api.git`, and
+     different users or ports on one host are not told apart. On a plain ssh server, or with two
+     forges on one host, a checkout can therefore be taken for another repository with the same
+     path. `TestCanonicalEqual` pins this.
+   - Percent-encoding is kept as written: an encoded `/` or `..` never merges path segments, and an
+     encoded character never equals its plain spelling. Both only cause a missed match, never a
+     wrong one.
    - Matching only relaxes. Rewriting a mismatched origin to the configured URL is not done; it
      changes the user's repository and would be a separate, opt-in behavior.
    - A checkout is moved to at most one project, and never away from a configured project it
      already serves: a config that lists one repository at two paths gets a second clone. Wider
-     matching makes that case reachable.
+     matching makes that case reachable. "Already serves" is decided by the filesystem
+     (`os.SameFile`), so `./libs/api`, `libs//api` and, on a case-insensitive filesystem,
+     `Libs/API` own a checkout at `libs/api`.
+   - A directory without a remote never matches, even when the configured URL is blank.
+   - Conflict messages show the remote found on disk without its user info, which may hold a token.
 2. **An existing empty directory at a configured path** is a conflict (`found no remote`). `git clone`
    into an empty directory succeeds. Should an empty directory count as missing?
 3. **`--strict`** (skipped → exit 1) for CI workspaces that must be fully converged. Phase 2.2.
