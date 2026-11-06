@@ -71,6 +71,33 @@ from the `projects` map in `.gogo`. `gogo validate` also no longer validates
 
 * add imported projects to gitignore ([e56f38e](https://github.com/daFish/gogo-meta/commit/e56f38e59064de59a6237d9904790e489fde7605))
 
+## [4.0.0](https://github.com/daFish/gogo-meta/compare/v3.2.0...v4.0.0) (2026-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** config files that loaded before may now be rejected: unknown keys at any level (including annotations such as `_comment`, JSON keys in another case such as `Projects`, and YAML anchor holders such as `x-defaults:`), repeated keys in JSON, YAML values of the wrong type (unquoted numbers or booleans where a string is expected, `yes`/`no` for booleans, fractional `concurrency`), and YAML documents whose aliases expand beyond yaml.v3's limits.
+
+### Features
+
+* **cli:** show a progress spinner while gogo update works ([8a2a4e1](https://github.com/daFish/gogo-meta/commit/8a2a4e1f0f1e8d743d1cb06af6b092d2ae767075))
+* **config:** validate config files against a JSON Schema ([72bc126](https://github.com/daFish/gogo-meta/commit/72bc126cb68e1a2a1bed4c7c1ba0f3ca15805052))
+
+
+### Bug Fixes
+
+* **cli:** harden canonical remote matching after security review ([5197e0a](https://github.com/daFish/gogo-meta/commit/5197e0a58913eb85075f0df1397489b6eeb6ddff))
+* **cli:** match remote URLs canonically in migrate and update ([454f9a6](https://github.com/daFish/gogo-meta/commit/454f9a65ead7e91a3e2348605f00d555d2d764ca)), closes [#81](https://github.com/daFish/gogo-meta/issues/81)
+* **deps:** update module github.com/mattn/go-isatty to v0.0.24 ([20d23f6](https://github.com/daFish/gogo-meta/commit/20d23f6e32ea9b39da3fd895d0756e7e39019b0c))
+* **deps:** update module go.yaml.in/yaml/v3 to v3.0.6 ([40b3573](https://github.com/daFish/gogo-meta/commit/40b35730880851be402fdc517a146e0e98b46d6b))
+* **deps:** update module go.yaml.in/yaml/v3 to v4 ([8663c77](https://github.com/daFish/gogo-meta/commit/8663c77b1f391a300b22122adb3c1b85b1072b52))
+
+
+### Build System
+
+* **deps:** require Go 1.26.10 for the net/url fix (GO-2026-6218) ([0f5230f](https://github.com/daFish/gogo-meta/commit/0f5230f1a9bc5e9128964ca4facfaf4aaae5c8f7))
+* **deps:** switch to the maintained YAML fork go.yaml.in/yaml/v3 ([87e9a60](https://github.com/daFish/gogo-meta/commit/87e9a6007ad877f1300f86296502d223acda605d))
+
 ## [3.2.0](https://github.com/daFish/gogo-meta/compare/v3.1.1...v3.2.0) (2026-09-11)
 
 
