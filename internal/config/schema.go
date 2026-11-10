@@ -18,7 +18,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 //go:embed gogo.schema.json
@@ -572,7 +572,7 @@ func decodeYAMLDocument(content []byte) (any, []schemaProblem, error) {
 	return jsonValue(document), nil, nil
 }
 
-// jsonValue turns what yaml.v3 decodes into an untyped value into its JSON
+// jsonValue turns what yaml.v4 decodes into an untyped value into its JSON
 // counterpart. Keys become strings and null keys are dropped, as they are when
 // decoding into a MetaConfig. Values JSON cannot express are spelled as YAML
 // writes them.
