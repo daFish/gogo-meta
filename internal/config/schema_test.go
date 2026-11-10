@@ -286,7 +286,7 @@ func ptr[T any](v T) *T {
 // TestSchemaKeepsWhatLoadedBefore pins configs that loaded before the schema
 // existed and must keep loading with the same result: null for an absent
 // value, keys that YAML reads as numbers or booleans, and integers that JSON
-// Schema and yaml.v3 both accept although they are written as floats.
+// Schema and yaml.v4 both accept although they are written as floats.
 func TestSchemaKeepsWhatLoadedBefore(t *testing.T) {
 	defaults := func(cfg MetaConfig) MetaConfig {
 		if cfg.Projects == nil {
@@ -598,7 +598,7 @@ func TestSchemaErrorMessages(t *testing.T) {
 }
 
 // TestValidateKeepsWhatTheSchemaCannotGuarantee pins the rules that stay in
-// Validate. A group left empty is one of them: yaml.v3 drops null list items
+// Validate. A group left empty is one of them: yaml.v4 drops null list items
 // only after the schema has counted them, so the schema cannot see it.
 func TestSchemaProblemOrderIsStable(t *testing.T) {
 	content := []byte(`{"projects":{"1a":1,"10":1,"2":1,"b":1,"01":1}}`)
@@ -744,7 +744,7 @@ func TestYAMLKeysMustBeScalars(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := parseContent([]byte(content), FormatYAML)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid map key")
+			assert.Contains(t, err.Error(), "map key")
 		})
 	}
 }

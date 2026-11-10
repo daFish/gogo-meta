@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -277,7 +277,7 @@ func IsSafeProjectPath(p string) bool {
 // Types, required keys and value ranges are defined by gogo.schema.json, which
 // every config passes before it gets here: files when they are parsed, configs
 // built in memory when WriteMetaConfig serializes them. A group without
-// members stays here because yaml.v3 drops null list items only after the
+// members stays here because yaml.v4 drops null list items only after the
 // schema has counted them.
 func Validate(config MetaConfig) error {
 	if config.Projects == nil {
